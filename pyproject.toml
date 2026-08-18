@@ -1,0 +1,22 @@
+[build-system]
+requires = ["setuptools>=65.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "ids-ingestion"
+version = "0.1.0"
+description = "Ingestion and streaming layer for a real-time network intrusion detection system"
+requires-python = ">=3.9"
+dependencies = [
+    "scapy>=2.5.0",
+    "kafka-python>=2.0.2",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=7.0.0"]
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
