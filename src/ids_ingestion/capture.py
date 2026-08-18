@@ -57,7 +57,7 @@ class LiveCapture(PacketSource):
             logger.warning("Live capture queue full; dropping packet")
 
     def packets(self) -> Iterator[PacketMeta]:
-        from scapy.sendrecv import AsyncSniffer
+        from scapy.all import AsyncSniffer
 
         self._sniffer = AsyncSniffer(
             iface=self.interface,

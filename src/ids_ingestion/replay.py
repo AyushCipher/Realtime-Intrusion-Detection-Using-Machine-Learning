@@ -36,7 +36,7 @@ class PcapReplay(PacketSource):
         self._reader = None
 
     def packets(self) -> Iterator[PacketMeta]:
-        from scapy.utils import PcapReader
+        from scapy.all import PcapReader
 
         last_pkt_time: Optional[float] = None
         with PcapReader(self.path) as reader:

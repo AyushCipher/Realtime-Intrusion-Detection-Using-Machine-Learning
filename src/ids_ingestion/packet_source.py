@@ -59,7 +59,10 @@ def packet_to_meta(pkt) -> Optional[PacketMeta]:
     """
     # Imported lazily so environments that only replay pre-captured metadata
     # (e.g. some unit tests) do not pay Scapy's import cost/privileges.
-    from scapy.layers.inet import IP, TCP, UDP
+    # `scapy.all` (rather than the individual `scapy.layers.*` submodules) is
+    # used deliberately: it registers the linktype -> layer bindings (e.g.
+    # Ethernet) that PcapReader/AsyncSniffer need to decode captures at all.
+    from scapy.all import IP, TCP, UDP
     from scapy.layers.inet6 import IPv6
 
     if IP in pkt:
