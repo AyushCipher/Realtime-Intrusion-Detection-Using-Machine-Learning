@@ -112,9 +112,15 @@ class TwoStageDetector:
         return results  # type: ignore[return-value]
 
 
-def build_alert(event: Dict[str, Any], scored: ScoredFlow) -> Dict[str, Any]:
+def build_alert(
+    event: Dict[str, Any],
+    scored: ScoredFlow,
+    explanation: Optional[List[Dict[str, Any]]] = None,
+) -> Dict[str, Any]:
     """Builds a Kafka alert event (schema.ALERT_EVENT_FIELDS) from a source
-    flow event and its ScoredFlow result."""
+    flow event and its ScoredFlow result. `explanation` is the optional
+    SHAP/TreeSHAP feature-contribution list from explainability.py,
+    JSON-serializable via explainability.explanation_to_alert_field."""
     from .schema import ALERT_SCHEMA_VERSION
 
     return {
@@ -133,7 +139,7 @@ def build_alert(event: Dict[str, Any], scored: ScoredFlow) -> Dict[str, Any]:
         "stage2_confidence": scored.stage2_confidence,
         "stage2_class_probabilities": scored.stage2_class_probabilities,
         "severity": severity_for(scored.stage2_predicted_class, scored.stage2_confidence),
-        "explanation": [],
+        "explanation": explanation or [],
         "model_version": MODEL_VERSION,
         "schema_version": ALERT_SCHEMA_VERSION,
     }
