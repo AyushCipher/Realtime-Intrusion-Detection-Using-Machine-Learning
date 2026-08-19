@@ -1,4 +1,5 @@
-"""Builds tests/fixtures/synthetic_cicids_sample.csv.
+"""Builds tests/fixtures/synthetic_cicids_sample.csv and
+tests/fixtures/synthetic_sequence_sample.csv.
 
 This is a SYNTHETIC dataset shaped like a CICIDS2017 CSV (same column names,
 including the dataset's well-known inconsistent leading-whitespace quirk),
@@ -93,54 +94,114 @@ def _rows_for(rng, category, raw_label, n, day, day_start_epoch):
         bwd_b_mean = _jitter(rng, p["bwd_b"], low=0)
         iat_mean = _jitter(rng, p["iat"], low=1)
 
-        total_fwd_bytes = fwd_b_mean * fwd_n
-        total_bwd_bytes = bwd_b_mean * bwd_n
-        flow_bytes_per_sec = (total_fwd_bytes + total_bwd_bytes) / max(dur / 1_000_000.0, 1e-6)
-        flow_packets_per_sec = (fwd_n + bwd_n) / max(dur / 1_000_000.0, 1e-6)
-
         offset_s = rng.uniform(0, 86_400)
-        row = {
-            " Flow Duration": dur,
-            " Total Fwd Packets": fwd_n,
-            " Total Backward Packets": bwd_n,
-            "Total Length of Fwd Packets": total_fwd_bytes,
-            " Total Length of Bwd Packets": total_bwd_bytes,
-            " Fwd Packet Length Min": max(fwd_b_mean * 0.6, 1),
-            " Fwd Packet Length Max": fwd_b_mean * 1.6,
-            " Fwd Packet Length Mean": fwd_b_mean,
-            " Fwd Packet Length Std": fwd_b_mean * 0.2,
-            "Bwd Packet Length Min": max(bwd_b_mean * 0.6, 0),
-            " Bwd Packet Length Max": bwd_b_mean * 1.6,
-            " Bwd Packet Length Mean": bwd_b_mean,
-            " Bwd Packet Length Std": bwd_b_mean * 0.2,
-            "Flow Bytes/s": flow_bytes_per_sec,
-            " Flow Packets/s": flow_packets_per_sec,
-            " Flow IAT Mean": iat_mean,
-            " Flow IAT Std": iat_mean * 0.3,
-            " Flow IAT Max": iat_mean * 2.5,
-            " Flow IAT Min": max(iat_mean * 0.1, 1),
-            " Fwd IAT Mean": iat_mean,
-            " Fwd IAT Std": iat_mean * 0.3,
-            " Fwd IAT Max": iat_mean * 2.5,
-            " Fwd IAT Min": max(iat_mean * 0.1, 1),
-            "Bwd IAT Mean": iat_mean * 1.1,
-            " Bwd IAT Std": iat_mean * 0.3,
-            " Bwd IAT Max": iat_mean * 2.5,
-            " Bwd IAT Min": max(iat_mean * 0.1, 1),
-            "SYN Flag Count": p["syn"],
-            " ACK Flag Count": p["ack"],
-            "FIN Flag Count": p["fin"],
-            " RST Flag Count": p["rst"],
-            " PSH Flag Count": p["psh"],
-            " URG Flag Count": p["urg"],
-            " ECE Flag Count": 0,
-            " CWE Flag Count": 0,
-            " Timestamp": pd.Timestamp(day_start_epoch, unit="s") + pd.Timedelta(seconds=offset_s),
-            " Source IP": f"10.{day}.{rng.integers(0, 255)}.{rng.integers(1, 255)}",
-            " Label": raw_label,
-        }
-        rows.append(row)
+        timestamp = pd.Timestamp(day_start_epoch, unit="s") + pd.Timedelta(seconds=offset_s)
+        src_ip = f"10.{day}.{rng.integers(0, 255)}.{rng.integers(1, 255)}"
+        rows.append(_build_row(dur, fwd_n, bwd_n, fwd_b_mean, bwd_b_mean, iat_mean, p, timestamp, src_ip, raw_label))
     return rows
+
+
+def _build_row(dur, fwd_n, bwd_n, fwd_b_mean, bwd_b_mean, iat_mean, p, timestamp, src_ip, raw_label):
+    total_fwd_bytes = fwd_b_mean * fwd_n
+    total_bwd_bytes = bwd_b_mean * bwd_n
+    flow_bytes_per_sec = (total_fwd_bytes + total_bwd_bytes) / max(dur / 1_000_000.0, 1e-6)
+    flow_packets_per_sec = (fwd_n + bwd_n) / max(dur / 1_000_000.0, 1e-6)
+    return {
+        " Flow Duration": dur,
+        " Total Fwd Packets": fwd_n,
+        " Total Backward Packets": bwd_n,
+        "Total Length of Fwd Packets": total_fwd_bytes,
+        " Total Length of Bwd Packets": total_bwd_bytes,
+        " Fwd Packet Length Min": max(fwd_b_mean * 0.6, 1),
+        " Fwd Packet Length Max": fwd_b_mean * 1.6,
+        " Fwd Packet Length Mean": fwd_b_mean,
+        " Fwd Packet Length Std": fwd_b_mean * 0.2,
+        "Bwd Packet Length Min": max(bwd_b_mean * 0.6, 0),
+        " Bwd Packet Length Max": bwd_b_mean * 1.6,
+        " Bwd Packet Length Mean": bwd_b_mean,
+        " Bwd Packet Length Std": bwd_b_mean * 0.2,
+        "Flow Bytes/s": flow_bytes_per_sec,
+        " Flow Packets/s": flow_packets_per_sec,
+        " Flow IAT Mean": iat_mean,
+        " Flow IAT Std": iat_mean * 0.3,
+        " Flow IAT Max": iat_mean * 2.5,
+        " Flow IAT Min": max(iat_mean * 0.1, 1),
+        " Fwd IAT Mean": iat_mean,
+        " Fwd IAT Std": iat_mean * 0.3,
+        " Fwd IAT Max": iat_mean * 2.5,
+        " Fwd IAT Min": max(iat_mean * 0.1, 1),
+        "Bwd IAT Mean": iat_mean * 1.1,
+        " Bwd IAT Std": iat_mean * 0.3,
+        " Bwd IAT Max": iat_mean * 2.5,
+        " Bwd IAT Min": max(iat_mean * 0.1, 1),
+        "SYN Flag Count": p["syn"],
+        " ACK Flag Count": p["ack"],
+        "FIN Flag Count": p["fin"],
+        " RST Flag Count": p["rst"],
+        " PSH Flag Count": p["psh"],
+        " URG Flag Count": p["urg"],
+        " ECE Flag Count": 0,
+        " CWE Flag Count": 0,
+        " Timestamp": timestamp,
+        " Source IP": src_ip,
+        " Label": raw_label,
+    }
+
+
+# --- A second fixture: per-source-IP multi-stage campaigns ----------------
+# sequence_model.py needs several flows from the *same* source IP to have
+# any history to look back on. The main fixture above assigns each row a
+# near-unique random IP (realistic for a broad traffic sample, useless for
+# sequence modeling), so this generates a small, separate dataset: a few
+# "attacker" IPs each running a recon -> brute-force -> DoS/exfiltration
+# campaign in order, plus several "benign" IPs each with a longer run of
+# ordinary flows.
+
+CAMPAIGN_STAGES = [
+    ("PortScan", "PortScan", 2),
+    ("Brute Force", "FTP-Patator", 2),
+    ("DoS/DDoS", "DoS Hulk", 2),
+]
+N_ATTACKER_IPS = 5
+N_BENIGN_IPS = 15
+BENIGN_FLOWS_PER_IP_RANGE = (6, 10)
+
+
+def _row_for_category(rng, category, raw_label, timestamp, src_ip):
+    p = dict(BASE_PARAMS[category])
+    dur = _jitter(rng, p["dur"], low=1)
+    fwd_n = max(1, int(round(_jitter(rng, p["fwd_n"], low=1))))
+    bwd_n = max(0, int(round(_jitter(rng, p["bwd_n"], low=0))))
+    fwd_b_mean = _jitter(rng, p["fwd_b"], low=1)
+    bwd_b_mean = _jitter(rng, p["bwd_b"], low=0)
+    iat_mean = _jitter(rng, p["iat"], low=1)
+    return _build_row(dur, fwd_n, bwd_n, fwd_b_mean, bwd_b_mean, iat_mean, p, timestamp, src_ip, raw_label)
+
+
+def build_sequence_dataframe() -> pd.DataFrame:
+    rng = np.random.default_rng(RNG_SEED + 1)
+    day_start = pd.Timestamp("2017-07-05").timestamp()
+    rows = []
+
+    for i in range(N_ATTACKER_IPS):
+        src_ip = f"10.9.{i}.{rng.integers(1, 255)}"
+        t = rng.uniform(0, 20_000)  # campaign start, early in the day
+        for category, raw_label, n_flows in CAMPAIGN_STAGES:
+            for _ in range(n_flows):
+                t += rng.uniform(5, 30)  # stages progress close together in time
+                timestamp = pd.Timestamp(day_start, unit="s") + pd.Timedelta(seconds=t)
+                rows.append(_row_for_category(rng, category, raw_label, timestamp, src_ip))
+
+    for i in range(N_BENIGN_IPS):
+        src_ip = f"10.8.{i}.{rng.integers(1, 255)}"
+        n_flows = rng.integers(*BENIGN_FLOWS_PER_IP_RANGE)
+        t = rng.uniform(0, 80_000)
+        for _ in range(n_flows):
+            t += rng.uniform(30, 600)
+            timestamp = pd.Timestamp(day_start, unit="s") + pd.Timedelta(seconds=t)
+            rows.append(_row_for_category(rng, "BENIGN", "BENIGN", timestamp, src_ip))
+
+    return pd.DataFrame(rows)
 
 
 def build_dataframe() -> pd.DataFrame:
@@ -162,9 +223,14 @@ def build_dataframe() -> pd.DataFrame:
 
 def main() -> None:
     FIXTURES_DIR.mkdir(parents=True, exist_ok=True)
+
     out_path = FIXTURES_DIR / "synthetic_cicids_sample.csv"
     build_dataframe().to_csv(out_path, index=False)
     print(f"Wrote {out_path}")
+
+    seq_out_path = FIXTURES_DIR / "synthetic_sequence_sample.csv"
+    build_sequence_dataframe().to_csv(seq_out_path, index=False)
+    print(f"Wrote {seq_out_path}")
 
 
 if __name__ == "__main__":
