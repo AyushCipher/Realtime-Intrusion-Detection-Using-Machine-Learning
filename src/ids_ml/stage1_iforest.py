@@ -11,7 +11,7 @@ heavier classifier on only a small flagged subset of live traffic.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Optional
+from typing import Optional, Union
 
 import joblib
 import numpy as np
@@ -22,7 +22,7 @@ from sklearn.preprocessing import StandardScaler
 @dataclass
 class Stage1Config:
     n_estimators: int = 200
-    contamination: str = "auto"
+    contamination: Union[str, float] = "auto"
     random_state: int = 0
     # None -> use IsolationForest's own inlier/outlier boundary (predict() == -1).
     # A float pins the flag to a specific point on anomaly_score()'s scale
