@@ -1,0 +1,83 @@
+services:
+  kafka:
+    image: apache/kafka:4.0.0
+    environment:
+      KAFKA_NODE_ID: "1"
+      KAFKA_PROCESS_ROLES: "broker,controller"
+      KAFKA_LISTENERS: "PLAINTEXT://:9092,CONTROLLER://:9093"
+      KAFKA_ADVERTISED_LISTENERS: "PLAINTEXT://kafka:9092"
+      KAFKA_CONTROLLER_QUORUM_VOTERS: "1@kafka:9093"
+      KAFKA_CONTROLLER_LISTENER_NAMES: "CONTROLLER"
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: "CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT"
+      KAFKA_INTER_BROKER_LISTENER_NAME: "PLAINTEXT"
+      # Single-broker cluster: Kafka's built-in defaults for these want 3
+      # brokers (replication factor 3, min ISR 2) and will otherwise leave
+      # internal topics like __consumer_offsets stuck in "creating" forever
+      # with no client-visible error -- consumer group join then hangs
+      # indefinitely. Found by testing this compose file end-to-end, not
+      # from any module's own docs.
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: "1"
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: "1"
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: "1"
+    healthcheck:
+      test: ["CMD-SHELL", "/opt/kafka/bin/kafka-topics.sh --bootstrap-server localhost:9092 --list"]
+      interval: 5s
+      timeout: 10s
+      retries: 30
+    volumes:
+      - kafka_data:/tmp/kraft-combined-logs
+
+  # All three application services point at this one broker (kafka:9092) --
+  # no module runs or talks to a broker of its own.
+  ingestion:
+    build: ./ingestion
+    depends_on:
+      kafka:
+        condition: service_healthy
+    environment:
+      INGESTION_BOOTSTRAP_SERVERS: "kafka:9092"
+      INGESTION_REPLAY_SPEED: "1"
+      INGESTION_LOOP_DELAY_SECONDS: "15"
+    restart: on-failure
+
+  ml:
+    build: ./ml
+    depends_on:
+      kafka:
+        condition: service_healthy
+    environment:
+      ML_BOOTSTRAP_SERVERS: "kafka:9092"
+    restart: on-failure
+
+  dashboard-api:
+    build: ./dashboard-api
+    depends_on:
+      kafka:
+        condition: service_healthy
+    environment:
+      IDS_DASHBOARD_USERNAME: "analyst"
+      IDS_DASHBOARD_PASSWORD: "changeme123"
+      IDS_DASHBOARD_BOOTSTRAP_SERVERS: "kafka:9092"
+      IDS_DASHBOARD_DB_PATH: "/app/data/alerts.db"
+      IDS_DASHBOARD_CORS_ORIGINS: "http://localhost:5173"
+    ports:
+      - "8000:8000"
+    volumes:
+      - dashboard_data:/app/data
+    restart: on-failure
+
+  dashboard-frontend:
+    build: ./dashboard-api/frontend
+    depends_on:
+      - dashboard-api
+    environment:
+      # Browser-facing URL: the browser runs on the host, not inside the
+      # compose network, so this must be the published host port, not the
+      # internal service name.
+      VITE_API_BASE_URL: "http://localhost:8000"
+    ports:
+      - "5173:5173"
+
+volumes:
+  kafka_data:
+  dashboard_data:
