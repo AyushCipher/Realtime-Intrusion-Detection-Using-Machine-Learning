@@ -9,3 +9,12 @@ dist/
 venv/
 .vscode/
 *.log
+node_modules/
+*.db
+models/
+
+# Leftover from the pre-integration repo layout (frontend/ moved to
+# dashboard-api/frontend/); left here only because it was locked by another
+# process (a file watcher/IDE) at restructuring time and could not be
+# deleted. Safe to remove by hand once nothing has it open.
+/frontend/
