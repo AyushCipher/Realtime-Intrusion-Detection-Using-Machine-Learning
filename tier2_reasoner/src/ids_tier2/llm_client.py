@@ -116,9 +116,19 @@ class GeminiLLMClient(LLMClient):
     added as a lower-friction alternative to `AnthropicLLMClient` (Google
     AI Studio keys work on the free tier immediately with no payment
     method, unlike the Anthropic Console).
+
+    The default model name has already had to change once during this
+    project's own live testing: `gemini-2.5-flash` (this module's
+    original default, and what the first live-verified results in
+    `tier2_reasoner/README.md` were measured against) returned a live 404
+    ("no longer available to new users") on a second, newer test account,
+    which pointed to `gemini-3.6-flash` as the replacement -- notably
+    faster in practice (~2.6s vs. ~5.75s median, one call). Google's Flash
+    model lineup moves; if this default 404s for you, the error message
+    itself names the current replacement.
     """
 
-    def __init__(self, model: str = "gemini-2.5-flash", api_key: Optional[str] = None) -> None:
+    def __init__(self, model: str = "gemini-3.6-flash", api_key: Optional[str] = None) -> None:
         try:
             from google import genai
             from google.genai import types
