@@ -8,13 +8,24 @@ name is stripped on load before anything else touches it.
 This module maps the raw CICFlowMeter columns onto
 `ids_ml.features.CANONICAL_FEATURE_COLUMNS` so the same feature space is
 used for training (from these CSVs) and inference (from live flow events).
+
+Two loader paths, for two differently-shaped releases sharing the same
+target feature space:
+
+- `load_and_map` / `load_cicids_csv` -- CICIDS2017 (CICFlowMeter-v2 column
+  names, e.g. "Total Fwd Packets").
+- `load_and_map_2018` / `load_cicids2018_csv` -- CSE-CIC-IDS2018's AWS
+  Open Data release (https://registry.opendata.aws/cse-cic-ids2018/),
+  which used CICFlowMeter-V3's renamed/abbreviated columns (e.g. "Tot Fwd
+  Pkts") and has its own verified data-quality quirks -- see the comment
+  block above `CICIDS2018_TO_2017_RENAME`.
 """
 
 from __future__ import annotations
 
 import logging
 from pathlib import Path
-from typing import Iterable, List, Union
+from typing import Dict, Iterable, List, Union
 
 import pandas as pd
 
@@ -103,6 +114,122 @@ def attack_category(raw_label: str) -> str:
     return ATTACK_CATEGORY_MAP.get(raw_label.strip(), "Other" if raw_label.strip() != "BENIGN" else "BENIGN")
 
 
+# --- CIC-IDS2018 (AWS Open Data "Processed Traffic Data for ML
+# Algorithms" release, https://registry.opendata.aws/cse-cic-ids2018/)
+# support --------------------------------------------------------------
+#
+# This release was generated with CICFlowMeter-V3, which renamed and
+# abbreviated every column relative to CICIDS2017/CICFlowMeter-v2's names
+# above (e.g. "Tot Fwd Pkts" vs "Total Fwd Packets") and dropped the Flow
+# ID/Source IP/Destination IP/Source Port identity columns entirely.
+# Verified directly against the 8 downloaded per-day CSVs, not assumed
+# from documentation -- "CWE Flag Count"'s typo (see above) carries over
+# unchanged, but "Flow Duration"/"Flow IAT ..."/"Fwd IAT ..."/"Bwd IAT
+# ..." already match CICIDS_COLUMN_MAP's names verbatim, so only the
+# columns actually renamed appear below.
+CICIDS2018_TO_2017_RENAME: Dict[str, str] = {
+    "Tot Fwd Pkts": "Total Fwd Packets",
+    "Tot Bwd Pkts": "Total Backward Packets",
+    "TotLen Fwd Pkts": "Total Length of Fwd Packets",
+    "TotLen Bwd Pkts": "Total Length of Bwd Packets",
+    "Fwd Pkt Len Max": "Fwd Packet Length Max",
+    "Fwd Pkt Len Min": "Fwd Packet Length Min",
+    "Fwd Pkt Len Mean": "Fwd Packet Length Mean",
+    "Fwd Pkt Len Std": "Fwd Packet Length Std",
+    "Bwd Pkt Len Max": "Bwd Packet Length Max",
+    "Bwd Pkt Len Min": "Bwd Packet Length Min",
+    "Bwd Pkt Len Mean": "Bwd Packet Length Mean",
+    "Bwd Pkt Len Std": "Bwd Packet Length Std",
+    "Flow Byts/s": "Flow Bytes/s",
+    "Flow Pkts/s": "Flow Packets/s",
+    "SYN Flag Cnt": "SYN Flag Count",
+    "ACK Flag Cnt": "ACK Flag Count",
+    "FIN Flag Cnt": "FIN Flag Count",
+    "RST Flag Cnt": "RST Flag Count",
+    "PSH Flag Cnt": "PSH Flag Count",
+    "URG Flag Cnt": "URG Flag Count",
+    "ECE Flag Cnt": "ECE Flag Count",
+}
+
+# Raw labels observed across the 8 per-day CSVs this project has actually
+# downloaded (Wed-14-02, Thu-15-02, Fri-16-02, Wed-21-02, Thu-22-02,
+# Fri-23-02, Thu-01-03, Fri-02-03), mapped onto the same family vocabulary
+# ATTACK_CATEGORY_MAP already uses so both datasets feed identical
+# downstream categories. "Infilteration" is the dataset's own misspelling,
+# not a typo introduced here -- see the AWS-hosted CSVs directly. Other
+# CSE-CIC-IDS2018 days (not downloaded here) may contain additional label
+# strings (e.g. PortScan, Heartbleed) not covered by this map; those rows
+# would fall through to "Other" via attack_category() rather than raise.
+CICIDS2018_ATTACK_CATEGORY_MAP: Dict[str, str] = {
+    "FTP-BruteForce": "Brute Force",
+    "SSH-Bruteforce": "Brute Force",
+    "DoS attacks-GoldenEye": "DoS/DDoS",
+    "DoS attacks-Slowloris": "DoS/DDoS",
+    "DoS attacks-Hulk": "DoS/DDoS",
+    "DoS attacks-SlowHTTPTest": "DoS/DDoS",
+    "DDOS attack-HOIC": "DoS/DDoS",
+    "DDOS attack-LOIC-UDP": "DoS/DDoS",
+    "Brute Force -Web": "Web Attack",
+    "Brute Force -XSS": "Web Attack",
+    "SQL Injection": "Web Attack",
+    "Infilteration": "Infiltration",
+    "Bot": "Botnet",
+}
+ATTACK_CATEGORY_MAP.update(CICIDS2018_ATTACK_CATEGORY_MAP)
+
+# The complete set of labels this project has verified appear in the 8
+# downloaded CSVs (Benign + every key above). Rows whose Label doesn't
+# match any of these are dropped by load_cicids2018_csv, not passed
+# through -- verified data-quality issue: some files contain stray rows
+# where a CSV header line got concatenated in as data (Label == "Label"
+# literally, seen in Thursday-01-03-2018 and Friday-16-02-2018) or a
+# truncated row (Label == "Be", seen in Friday-23-02-2018). Every column
+# in a leaked-header row holds header-name strings rather than real
+# values, so keeping these rows would silently corrupt every numeric
+# feature in them, not just the label -- dropping outright is safer than
+# trying to salvage partial data from a corrupted row.
+_CICIDS2018_KNOWN_LABELS = {"Benign"} | set(CICIDS2018_ATTACK_CATEGORY_MAP)
+
+
+def load_cicids2018_csv(paths: Union[str, Path, Iterable[Union[str, Path]]]) -> pd.DataFrame:
+    """Load one or more CSE-CIC-IDS2018 "Processed Traffic Data for ML
+    Algorithms" CSVs, renamed onto CICIDS2017's column names so
+    `map_to_canonical` handles both datasets identically. See the module
+    comment above `CICIDS2018_TO_2017_RENAME` for what's actually
+    different between the two releases and how each difference is
+    handled.
+    """
+    if isinstance(paths, (str, Path)):
+        paths = [paths]
+    frames = []
+    for path in paths:
+        logger.info("Loading %s", path)
+        df = pd.read_csv(path, low_memory=False)
+        df = _strip_columns(df)
+
+        n_before = len(df)
+        df = df[df[LABEL_COLUMN].isin(_CICIDS2018_KNOWN_LABELS)].copy()
+        n_dropped = n_before - len(df)
+        if n_dropped:
+            logger.warning("%s: dropped %d row(s) with an unrecognized/corrupted Label", path, n_dropped)
+
+        df[LABEL_COLUMN] = df[LABEL_COLUMN].replace({"Benign": "BENIGN"})
+        df = df.rename(columns=CICIDS2018_TO_2017_RENAME)
+        frames.append(df)
+    if not frames:
+        raise ValueError("no CSV paths given")
+    return pd.concat(frames, ignore_index=True)
+
+
+def load_and_map_2018(paths: Union[str, Path, Iterable[Union[str, Path]]]) -> pd.DataFrame:
+    # dayfirst=True: verified against the actual downloaded CSVs by
+    # cross-referencing Timestamp values against each file's own filename
+    # date (e.g. Thursday-01-03-2018's rows read "01/03/2018", which is
+    # only consistent with day-first -- month-first would read that as
+    # January 3rd, contradicting the filename's March 1st).
+    return map_to_canonical(load_cicids2018_csv(paths), dayfirst=True)
+
+
 def _strip_columns(df: pd.DataFrame) -> pd.DataFrame:
     df = df.rename(columns={c: c.strip() for c in df.columns})
     return df
@@ -122,9 +249,18 @@ def load_cicids_csv(paths: Union[str, Path, Iterable[Union[str, Path]]]) -> pd.D
     return pd.concat(frames, ignore_index=True)
 
 
-def map_to_canonical(df: pd.DataFrame) -> pd.DataFrame:
+def map_to_canonical(df: pd.DataFrame, dayfirst: bool = False) -> pd.DataFrame:
     """Produce a DataFrame with canonical feature columns, label, category,
     and timestamp (if present), from a raw (whitespace-stripped) CICIDS df.
+
+    `dayfirst` controls how the Timestamp column's ambiguous D/M vs M/D
+    dates (e.g. "01/03/2018", where day and month are both <=12) are
+    parsed. Get this wrong and dates silently swap month/day instead of
+    raising -- corrupting every downstream time-based split without any
+    error. CSE-CIC-IDS2018's AWS release is verified day-first (see
+    `load_and_map_2018`, which passes `dayfirst=True`); this default
+    (`False`) is CICIDS2017's, unchanged from before this parameter
+    existed.
     """
     missing = [c for c in CICIDS_COLUMN_MAP if c not in df.columns]
     if missing:
@@ -149,7 +285,7 @@ def map_to_canonical(df: pd.DataFrame) -> pd.DataFrame:
     out["is_attack"] = out["label"] != "BENIGN"
 
     if TIMESTAMP_COLUMN in df.columns:
-        out["timestamp"] = pd.to_datetime(df[TIMESTAMP_COLUMN], errors="coerce", dayfirst=False)
+        out["timestamp"] = pd.to_datetime(df[TIMESTAMP_COLUMN], errors="coerce", dayfirst=dayfirst)
     if SOURCE_IP_COLUMN in df.columns:
         out["src_ip"] = df[SOURCE_IP_COLUMN]
 

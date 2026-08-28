@@ -29,9 +29,10 @@ Kafka: network.flow.features        Two-stage detector          Kafka: network.i
 - `schema.py` -- the input (flow-feature) and output (alert) topic contracts.
 - `features.py` -- the canonical numeric feature vector shared by training and live inference.
 - `data.py` -- CICIDS2017/CIC-IDS2018 CSV loading and column mapping.
-- `split.py` -- time-based train/val/test splitting (and the random-split comparison used to quantify leakage).
+- `split.py` -- time-based train/val/test splitting (and the random-split comparison used to quantify leakage), plus leave-one-family-out zero-day splitting (see [Open-set escalation](#open-set-escalation-experimental) below).
 - `stage1_iforest.py` / `stage2_xgboost.py` -- the two detection stages.
-- `pipeline.py` -- the deployed stage1 -> stage2 cascade and alert-building/severity logic.
+- `openset_head.py` / `softmax_gate.py` / `conformal_gate.py` / `adaptive_conformal_gate.py` -- open-set escalation: the OpenMax recalibration head, its closed-set softmax baseline, static budget-based threshold calibration, and its online-adaptive (drift-robust) counterpart.
+- `pipeline.py` -- the deployed stage1 -> stage2 cascade, the optional three-way open-set router, and alert-building/severity logic.
 - `evaluation.py` -- per-category metrics, split-leakage comparison, concept drift, low-and-slow robustness probe.
 - `explainability.py` -- TreeSHAP per-prediction feature contributions.
 - `sequence_model.py` -- optional per-source-IP sequence model for multi-stage attacks.
@@ -253,6 +254,276 @@ Shapley values without depending on an external parser matching XGBoost's
 exact model serialization format, so it's used here directly (see
 `explainability.py`'s module docstring for the full explanation).
 
+## Open-set escalation (experimental)
+
+The deployed cascade is closed-set: stage 2 always picks the best-fitting
+known class, even for traffic that doesn't resemble anything it trained
+on. `pipeline.TwoStageDetector` optionally takes a `gate` that recalibrates
+stage-1-flagged rows into a three-way decision instead:
+
+- **known-benign** -- stage 2 (recalibrated) says BENIGN.
+- **known-attack** -- stage 2 (recalibrated) confidently predicts a known family.
+- **escalated** -- the gate's `unknown_mass` exceeds a calibrated threshold; this
+  is the fraction of flagged traffic a downstream tier (not yet built --
+  see below) would receive.
+
+Two interchangeable gates, both producing the same
+`(predicted_class, known_class_probabilities, unknown_mass)` shape:
+
+- `softmax_gate.SoftmaxGate` -- the baseline. `unknown_mass = 1 -
+  stage2_confidence`; this is the pipeline's original behavior, unchanged,
+  just exposed behind the gate interface so it's a literal point of
+  comparison rather than assumed better-or-worse.
+- `openset_head.OpenMaxHead` -- OpenMax (Bendale & Boult, 2016) adapted to
+  XGBoost's per-class margins instead of a deep network's logits: fits a
+  Weibull tail per class over correctly-classified training examples'
+  distance from that class's mean margin vector, then shrinks the
+  top-ranked classes' scores by how far outside that tail a query lands,
+  redistributing the shrunk mass into `unknown_mass`. See the module
+  docstring for the full algorithm and exactly what this adaptation does
+  and doesn't inherit from the original paper.
+
+The escalation threshold itself isn't a fixed number: `conformal_gate.
+calibrate_threshold` sets it from a calibration set of known traffic via a
+split-conformal quantile, against an explicit operator budget (e.g.
+"escalate at most 10% of known flows") -- see that module's docstring for
+the guarantee this borrows from conformal prediction.
+
+### H1 evaluation: does OpenMax actually beat the softmax baseline?
+
+`evaluation.run_openset_trial` runs one leave-one-family-out fold at one
+seed for both gates head-to-head: stage 2 is fit on 75% of the known-family
+training rows, the escalation threshold is calibrated (`conformal_gate.
+calibrate_threshold`, budget=0.1) on a genuinely separate held-out 25% of
+*known* rows (never the same rows stage 2 trained on -- see the function's
+docstring for why that distinction matters), and both `unknown_recall`
+(escalation rate on the held-out family) and `unknown_auroc` (unknown_mass
+as a novelty score, independent of any threshold) are measured on the test
+split. `evaluation.openset_vs_softmax_report` repeats this across all 7
+non-benign families x 5 seeds; `openset_vs_softmax_significance` runs a
+paired Wilcoxon signed-rank test on top of that table.
+
+Result on this synthetic fixture, budget=0.1, seeds 0-4, mean over 5 seeds
+per family:
+
+| family | openmax recall | softmax recall | openmax AUROC | softmax AUROC |
+|---|---|---|---|---|
+| Botnet | 0.993 | 0.900 | 0.995 | 0.972 |
+| Brute Force | 1.000 | 1.000 | 0.926 | 0.997 |
+| DoS/DDoS | 1.000 | 0.200 | 0.983 | 0.873 |
+| Heartbleed | 1.000 | 1.000 | 0.975 | 0.975 |
+| Infiltration | 0.080 | 0.000 | 0.465 | 0.493 |
+| PortScan | 1.000 | 1.000 | 0.982 | 0.968 |
+| Web Attack | 0.800 | 1.000 | 0.934 | 0.994 |
+
+Paired across all 35 (family, seed) pairs: unknown-recall mean 0.839
+(OpenMax) vs 0.729 (softmax), Wilcoxon p=0.084 -- suggestive but **not
+significant at p<0.05**. Unknown-AUROC is essentially tied (0.894 vs
+0.896, p=0.61): the two scores separate known from unknown traffic about
+equally well overall, but OpenMax's shape lets more of that separation
+land on the right side of a fixed 10%-budget threshold on some families
+(most visibly DoS/DDoS) while doing the opposite on at least one (Web
+Attack) -- a genuinely mixed result, not a clean win for H1.
+
+**Read this cautiously, for three concrete reasons, not just the usual
+"it's synthetic" disclaimer:**
+
+1. **n=35 pairs overstates the independence here.** The leave-one-family-out
+   design has exactly 7 independent units (families); the 5 seeds per
+   family are correlated resamples (same family, same fixture, only the
+   fit/calibration split and XGBoost's own randomness differ), not 5
+   independent replications of the underlying comparison. Treat the
+   p-value as closer to "n≈7" statistical power than "n=35".
+2. **Infiltration is a near-total failure for both gates** (support of 2-5
+   correctly-classified training examples per fold -- see `openset_head.
+   py`'s `_MIN_EXAMPLES_FOR_TAIL` guard, which is exactly why OpenMax has
+   no tail to work with here) -- consistent with this dataset's established
+   pattern (see the per-category tables earlier in this README) that rare,
+   low-support categories are where every method in this repo struggles,
+   open-set escalation included.
+3. **Caricatured, well-separated synthetic categories** are not a
+   meaningful testbed for an open-set claim either way -- CICIDS2017/2018's
+   real families sit far closer together in feature space than this
+   fixture's deliberately spread-apart ones do, in both directions: a real
+   held-out family might be *easier* to catch as unknown (genuinely novel
+   behavior, not just a different label on similar traffic) or *harder*
+   (overlapping enough with known families that OpenMax's distance signal
+   doesn't separate it at all).
+
+### H1 on real data: CSE-CIC-IDS2018
+
+The synthetic result above was rerun against real network traffic: 8 days
+of CSE-CIC-IDS2018 (AWS Open Data release, https://registry.opendata.aws/cse-cic-ids2018/
+-- publicly downloadable, no registration wall), covering Brute Force, DoS,
+DDoS, Web Attack, Infiltration, and Botnet. `ids_ml.data.load_and_map_2018`
+handles this release's different column naming (CICFlowMeter-V3) and two
+verified data-quality issues (leaked-header rows, and timestamps that are
+day-first -- getting that wrong silently corrupts every time-based split;
+see that function's docstring and `scripts/build_cicids2018_subsample.py`,
+which builds a capped, documented 333,648-row subsample from the full
+~7.5M rows for tractable per-trial refitting). To reproduce: download the
+8 days listed in that script's docstring from the AWS bucket, then
+
+```
+python -m scripts.build_cicids2018_subsample --input-dir <downloaded CSVs> --output real_cicids2018_subsample.csv
+python -m scripts.run_real_data_experiments --data real_cicids2018_subsample.csv
+```
+
+Result, same protocol as above (budget=0.1, 5 seeds), mean over 5 seeds per family:
+
+| family | openmax recall | softmax recall | openmax AUROC | softmax AUROC |
+|---|---|---|---|---|
+| Botnet | 0.037 | 0.000 | 0.838 | 0.821 |
+| Brute Force | 0.087 | 0.061 | 0.628 | 0.618 |
+| DoS/DDoS | 0.465 | 0.310 | 0.437 | 0.361 |
+| Infiltration | 0.070 | 0.074 | 0.510 | 0.531 |
+| Web Attack | 0.169 | 0.026 | 0.742 | 0.728 |
+
+Paired across all 25 (family, seed) pairs: unknown-recall mean 0.166
+(OpenMax) vs 0.094 (softmax), Wilcoxon **p=0.00012**. Unknown-AUROC mean
+0.631 vs 0.612, **p=0.032**. Unlike the synthetic result, **this is a
+real, significant win for H1** -- OpenMax beats the softmax baseline on 4
+of 5 real families (Infiltration is the one exception, essentially tied),
+and the significance is far stronger than anything the synthetic fixture
+produced (p=0.00012 vs. synthetic's p=0.084).
+
+Two things worth being precise about rather than just reporting the win:
+
+- **Absolute recall is low for both gates** -- even OpenMax's best case
+  (DoS/DDoS, 0.465) means more than half of a genuinely novel attack
+  family's traffic still slips past a 10%-budget escalation gate
+  undetected. This is a much harder, more realistic result than the
+  synthetic fixture's near-perfect recalls, and is the honest number to
+  report, not the synthetic table.
+- **These 25 pairs have the same independence caveat as the synthetic
+  run** -- 5 real families, 5 correlated-by-family seeds each, so treat
+  the statistical power as closer to n=5 than n=25. The p-value being much
+  smaller than the synthetic run's despite the same nominal pair count is
+  itself informative (a larger, more consistent effect size across real
+  families), not just a statistical-power artifact.
+
+**What's still open:**
+
+- **No downstream tier consumes `escalated` traffic yet.** The router
+  produces the label; nothing currently does LLM/RAG reasoning or any
+  other second-tier analysis on it.
+- **No escalation-rate-vs-unknown-recall tradeoff curve or latency/
+  throughput harness yet.**
+- **PortScan and Heartbleed weren't in the 8 downloaded CSE-CIC-IDS2018
+  days** (they're on other days of that release, not fetched here) --
+  the real-data LOFO above covers 5 of the 7 families the synthetic run
+  covered, not all of them.
+- **Cross-dataset generalization** (e.g. train on CICIDS2018, test the
+  LOFO holdout against UNSW-NB15 or CIC-IoT2023) is untested.
+
+## Adaptive conformal calibration under drift (H2)
+
+`conformal_gate.calibrate_threshold` sets the escalation threshold once,
+from one held-out batch of known traffic, via a split-conformal quantile.
+That guarantee implicitly assumes the deployment distribution stays
+exchangeable with the calibration batch -- an assumption this project's
+own `evaluation.concept_drift_report` already demonstrates is false here
+(day-2 traffic's feature distributions are deliberately shifted from
+day-1's in the synthetic fixture, and real network traffic drifts for the
+same reason real training data does). Under that shift, a static
+threshold's true escalation rate can silently drift away from the
+requested budget, with nothing in the system signaling that it happened.
+
+`adaptive_conformal_gate.AdaptiveConformalGate` replaces the one-shot
+calibration with Adaptive Conformal Inference (Gibbs & Candès, NeurIPS
+2021): the significance level `alpha_t` updates after every scored
+known-traffic flow based on whether that flow was escalated, continuously
+pulling the realized escalation rate back toward the target budget instead
+of trusting a single calibration pass to hold. See the module docstring
+for the exact update rule and, importantly, **what was checked against
+the literature before building this**: CALIBURN (arXiv 2605.24696) uses
+only static Conformal Risk Control and names this exact adaptation as
+unimplemented future work; FIRCE/FADES (arXiv 2605.01962; MDPI Electronics
+15(10):2114) use periodic recalibration triggered by a drift-detection
+signal, a related but distinct mechanism from continuous online updating.
+None of the three combine this with open-set/zero-day detection.
+
+### H2 result: does it actually hold the budget better?
+
+`evaluation.static_vs_adaptive_conformal_drift_report` streams both gates
+-- a statically-calibrated `ConformalGate` and a fresh
+`AdaptiveConformalGate`, both starting from the *same* initial calibration
+batch -- over known traffic spanning day 1 (post-calibration, "pre_drift")
+and day 2 ("post_drift"), and measures each one's realized escalation rate
+against the target budget. `evaluation.static_vs_adaptive_conformal_report`
+repeats this across 10 random fit/calibration splits (seeds); `_significance`
+runs a paired Wilcoxon test on the absolute error from budget.
+
+Result on this synthetic fixture, budget=0.1, 10 seeds:
+
+| segment | static error (mean) | adaptive error (mean) | Wilcoxon p |
+|---|---|---|---|
+| pre_drift | 0.0503 | 0.0027 | **0.00195** |
+| post_drift | 0.0310 | 0.0016 | **0.00391** |
+| pooled | 0.0407 | 0.0022 | **0.0001** |
+
+The adaptive gate's error is roughly **18-19x smaller** than the static
+gate's, and the difference is significant well past p<0.01 in both
+segments individually -- a much stronger result than H1's. Worth being
+precise about *why*, rather than just calling it a drift-adaptation win:
+the static gate is already noticeably off-target even in `pre_drift`
+(same distribution as its own calibration batch), because this fixture's
+tiny calibration set (order of 100 rows) gives a high-variance one-shot
+quantile estimate. The adaptive gate's advantage is real in both segments
+because it effectively recalibrates continuously against every flow it
+sees, not because it uniquely "detects drift" -- `post_drift`'s static
+error being *smaller* than `pre_drift`'s in this run (0.031 vs 0.050) is
+itself a reminder that small-sample calibration noise, not drift alone,
+is doing a lot of the work here. The honest H2 claim from this experiment
+is: **continuous online calibration is far more robust than a one-shot
+static calibration, both to ordinary calibration-sample noise and to
+concept drift on top of it** -- not narrowly "it detects drift."
+
+### H2 on real data: CSE-CIC-IDS2018
+
+Rerun on the same real subsample H1 uses above, with "drift" now meaning
+what it actually should: an early-days window (Feb 14/15/16/21) calibrating
+against a later-days window (Feb 22/23, Mar 1/2), 212,720 and 120,928 rows
+respectively, 10 seeds:
+
+| segment | static error (mean) | adaptive error (mean) | Wilcoxon p |
+|---|---|---|---|
+| pre_drift | 0.09932 | 0.00092 | **0.00195** |
+| post_drift | 0.09955 | 0.00086 | **0.00195** |
+| pooled | 0.09943 | 0.00089 | **1.9e-06** |
+
+This is a starker failure of static calibration than the synthetic run
+showed, not a milder one. The static gate's realized escalation rate on
+real data collapsed to **~0.05% -- essentially never escalating**, against
+a target budget of 10%; the adaptive gate held ~10.08-10.09% throughout,
+almost exactly on target, in both segments. The mechanism is the same one
+described above (a small one-shot calibration batch on a heavy-tailed
+real score distribution can set a threshold high enough that almost
+nothing in deployment ever crosses it), just far more pronounced at real
+scale than the tiny synthetic fixture's calibration set showed.
+
+**What's still open:**
+
+- **Live deployment needs a ground-truth proxy this experiment doesn't
+  need.** The evaluation above calls `AdaptiveConformalGate.update()` only
+  on rows *known* (by the labeled dataset) to be in-distribution -- valid
+  for testing the calibration mechanism itself, but a live `ScoringService`
+  doesn't have ground-truth labels for incoming flows in real time. Wiring
+  this into `pipeline.TwoStageDetector`'s live path requires deciding what
+  to call `update()` on when the true label isn't available yet (e.g.
+  updating on every scored flow under the assumption that the vast
+  majority of live traffic is in fact known/benign, similar to how stage
+  1's contamination assumption already works) -- not yet done or tested.
+- Not yet compared against `openset_head.OpenMaxHead`'s `unknown_mass` as
+  the score being calibrated -- this run uses `softmax_gate.SoftmaxGate`
+  throughout, to isolate the calibration mechanism from the open-set
+  detection question H1 already covers.
+- The pre/post drift split here is a single cutoff date on 8 real days,
+  not a controlled drift magnitude -- unlike the synthetic fixture's
+  `DRIFT_FACTOR`, there's no ground truth for how much the real
+  distribution actually shifted, only that it's genuinely different
+  traffic, captured on different days.
+
 ## Optional: per-source-IP sequence model
 
 `sequence_model.py` targets the multi-stage-attack case (recon -> brute
@@ -357,6 +628,31 @@ PYTHONPATH=src pytest
 - **Backpressure can drop alerts** under sustained broker unavailability,
   same tradeoff as the ingestion module's producer -- see
   `alert_producer.BufferedAlertProducer`'s `drop_oldest`/`block` policies.
+- **Open-set escalation's H1 result is significant on real data (CSE-CIC-IDS2018,
+  p=0.00012), suggestive-only on synthetic data (p=0.084) -- and even the real
+  result has low absolute recall.** See [H1 on real
+  data](#h1-on-real-data-cse-cic-ids2018): OpenMax beats the softmax
+  baseline's unknown-family recall on 4 of 5 real attack families, but the
+  winning recall itself tops out at 0.465 (DoS/DDoS) -- more than half of
+  a novel attack family's traffic still gets past a 10%-budget gate
+  undetected, on the family OpenMax handles best. Nothing downstream
+  consumes the `escalated` decision yet. Don't read the
+  `TwoStageDetector(gate=...)` option as "open-set detection is solved
+  here" -- it's a real, measured improvement over the closed-set baseline,
+  not a solved zero-day detector.
+- **Adaptive conformal calibration (H2) is a strong, significant result on
+  both synthetic and real data, but isn't wired into the live pipeline.**
+  `evaluation.static_vs_adaptive_conformal_report` shows
+  `AdaptiveConformalGate` holding its escalation-rate budget far more
+  accurately than a static `ConformalGate` -- ~18-19x on the synthetic
+  fixture (p<0.004), and on real CSE-CIC-IDS2018 the static gate's
+  escalation rate collapsed to ~0.05% (essentially never escalating)
+  against a static error ~115x larger than the adaptive gate's
+  (p<0.002 in both drift segments, p=1.9e-6 pooled) -- see [Adaptive
+  conformal calibration under drift](#adaptive-conformal-calibration-under-drift-h2).
+  But the evaluation feeds it ground-truth-known calibration traffic, which
+  a live `ScoringService` doesn't have in real time. `TwoStageDetector`
+  still only accepts a static `ConformalGate` as `escalation_gate`.
 
 ## Out of scope
 

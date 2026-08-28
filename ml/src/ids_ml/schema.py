@@ -107,6 +107,12 @@ ALERT_EVENT_FIELDS: Dict[str, str] = {
     "stage2_class_probabilities": "object",
     "severity": "string",
     "explanation": "array",
+    # Open-set fields (see pipeline.py's module docstring). Present on every
+    # alert regardless of whether a gate is configured: unknown_mass is 0.0,
+    # escalated is False, and escalation_trigger is "" when it isn't.
+    "unknown_mass": "number",
+    "escalated": "boolean",
+    "escalation_trigger": "string",  # "openset" | "softmax" | ""
     "model_version": "string",
     "schema_version": "integer",
 }

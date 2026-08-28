@@ -1,14 +1,23 @@
 from pathlib import Path
 
+import numpy as np
 import pandas as pd
+import pytest
 
 from ids_ml.data import load_and_map
 from ids_ml.evaluation import (
     adversarial_robustness_report,
     concept_drift_report,
+    expected_calibration_error,
     leakage_comparison_report,
+    openset_vs_softmax_report,
+    openset_vs_softmax_significance,
     per_category_report,
+    run_openset_trial,
     simulate_low_and_slow,
+    static_vs_adaptive_conformal_drift_report,
+    static_vs_adaptive_conformal_report,
+    static_vs_adaptive_conformal_significance,
 )
 from ids_ml.features import CANONICAL_FEATURE_COLUMNS
 from ids_ml.pipeline import TwoStageDetector
@@ -17,6 +26,7 @@ from ids_ml.stage1_iforest import AnomalyPreFilter, Stage1Config
 from ids_ml.stage2_xgboost import AttackClassifier, Stage2Config
 
 FIXTURE_PATH = Path(__file__).parent / "fixtures" / "synthetic_cicids_sample.csv"
+_FAST_N_ESTIMATORS = 30  # keep open-set trial tests fast; not a metric-quality claim
 
 
 def test_per_category_report_basic_correctness():
@@ -91,3 +101,151 @@ def test_adversarial_robustness_report_runs_and_returns_valid_rates():
     assert 0.0 <= report["original_stage1_flag_rate"] <= 1.0
     assert 0.0 <= report["low_and_slow_stage1_flag_rate"] <= 1.0
     assert report["n_flows"] == len(attack_rows)
+
+
+# --- Open-set: OpenMax vs softmax head-to-head ------------------------------
+
+
+def test_expected_calibration_error_is_zero_for_a_perfectly_calibrated_score():
+    # Half the mass at score 0.0 with true label 0, half at score 1.0 with
+    # true label 1 -- every bin's mean score exactly matches its accuracy.
+    y_true = [0, 0, 0, 1, 1, 1]
+    y_score = [0.0, 0.0, 0.0, 1.0, 1.0, 1.0]
+    assert expected_calibration_error(y_true, y_score) == pytest.approx(0.0, abs=1e-9)
+
+
+def test_expected_calibration_error_is_positive_for_overconfident_scores():
+    # Score claims near-certainty (0.95) but the true positive rate in that
+    # bin is only 50% -- a large calibration gap.
+    y_true = [0, 1, 0, 1]
+    y_score = [0.95, 0.95, 0.95, 0.95]
+    ece = expected_calibration_error(y_true, y_score)
+    assert ece == pytest.approx(0.45, abs=1e-9)
+
+
+def test_expected_calibration_error_returns_nan_for_empty_input():
+    assert np.isnan(expected_calibration_error([], []))
+
+
+def test_run_openset_trial_returns_both_gates_with_valid_ranges():
+    df = load_and_map(FIXTURE_PATH)
+    results = run_openset_trial(
+        df, "Botnet", CANONICAL_FEATURE_COLUMNS, budget=0.2, seed=0, stage2_n_estimators=_FAST_N_ESTIMATORS
+    )
+
+    assert {r.gate_name for r in results} == {"softmax", "openset"}
+    for r in results:
+        assert r.family == "Botnet"
+        assert r.n_unknown_test > 0
+        for value in (r.escalation_rate_on_known, r.unknown_recall, r.unknown_auroc, r.ece, r.brier):
+            assert np.isnan(value) or 0.0 <= value <= 1.0
+
+
+def test_run_openset_trial_refuses_benign_holdout():
+    df = load_and_map(FIXTURE_PATH)
+    with pytest.raises(ValueError):
+        run_openset_trial(df, "BENIGN", CANONICAL_FEATURE_COLUMNS, stage2_n_estimators=_FAST_N_ESTIMATORS)
+
+
+def test_openset_vs_softmax_report_has_one_row_per_family_seed_gate():
+    df = load_and_map(FIXTURE_PATH)
+    families = ["Botnet", "PortScan"]
+    seeds = [0, 1]
+    report = openset_vs_softmax_report(
+        df, CANONICAL_FEATURE_COLUMNS, families=families, seeds=seeds, budget=0.2, stage2_n_estimators=_FAST_N_ESTIMATORS
+    )
+
+    assert len(report) == len(families) * len(seeds) * 2
+    assert set(report["family"]) == set(families)
+    assert set(report["seed"]) == set(seeds)
+    assert set(report["gate_name"]) == {"softmax", "openset"}
+
+
+def test_openset_vs_softmax_significance_structure_and_p_value_range():
+    df = load_and_map(FIXTURE_PATH)
+    report = openset_vs_softmax_report(
+        df,
+        CANONICAL_FEATURE_COLUMNS,
+        families=["Botnet", "PortScan", "Brute Force"],
+        seeds=[0, 1, 2],
+        budget=0.2,
+        stage2_n_estimators=_FAST_N_ESTIMATORS,
+    )
+    result = openset_vs_softmax_significance(report, metric="unknown_recall")
+
+    assert {"metric", "n_pairs", "statistic", "p_value", "openset_mean", "softmax_mean"}.issubset(result.keys())
+    if result["n_pairs"] >= 2:
+        assert np.isnan(result["p_value"]) or 0.0 <= result["p_value"] <= 1.0
+
+
+def test_openset_vs_softmax_significance_handles_too_few_pairs():
+    tiny_report = pd.DataFrame(
+        [{"family": "Botnet", "seed": 0, "gate_name": "softmax", "unknown_recall": 0.5}]
+    )
+    result = openset_vs_softmax_significance(tiny_report, metric="unknown_recall")
+    assert result["n_pairs"] < 2
+    assert np.isnan(result["p_value"])
+
+
+# --- Static vs. adaptive conformal calibration under drift -----------------
+
+
+def test_static_vs_adaptive_conformal_drift_report_structure():
+    df = load_and_map(FIXTURE_PATH)
+    window_a, window_b = time_window_split(df, pd.Timestamp("2017-07-04"))
+    assert len(window_a) > 0 and len(window_b) > 0
+
+    results = static_vs_adaptive_conformal_drift_report(
+        window_a,
+        window_b,
+        CANONICAL_FEATURE_COLUMNS,
+        budget=0.1,
+        stage2_n_estimators=_FAST_N_ESTIMATORS,
+    )
+
+    assert {r.segment for r in results} == {"pre_drift", "post_drift"}
+    for r in results:
+        assert r.n > 0
+        assert 0.0 <= r.static_escalation_rate <= 1.0
+        assert 0.0 <= r.adaptive_escalation_rate <= 1.0
+        assert r.static_error == pytest.approx(abs(r.static_escalation_rate - 0.1))
+        assert r.adaptive_error == pytest.approx(abs(r.adaptive_escalation_rate - 0.1))
+
+
+def test_static_vs_adaptive_conformal_report_has_one_row_per_seed_segment():
+    df = load_and_map(FIXTURE_PATH)
+    window_a, window_b = time_window_split(df, pd.Timestamp("2017-07-04"))
+    seeds = [0, 1, 2]
+
+    report = static_vs_adaptive_conformal_report(
+        window_a, window_b, CANONICAL_FEATURE_COLUMNS, budget=0.1, seeds=seeds, stage2_n_estimators=_FAST_N_ESTIMATORS
+    )
+
+    assert set(report["seed"]) == set(seeds)
+    assert set(report["segment"]) == {"pre_drift", "post_drift"}
+    assert len(report) == len(seeds) * 2
+
+
+def test_static_vs_adaptive_conformal_significance_structure():
+    df = load_and_map(FIXTURE_PATH)
+    window_a, window_b = time_window_split(df, pd.Timestamp("2017-07-04"))
+    report = static_vs_adaptive_conformal_report(
+        window_a,
+        window_b,
+        CANONICAL_FEATURE_COLUMNS,
+        budget=0.1,
+        seeds=[0, 1, 2, 3, 4],
+        stage2_n_estimators=_FAST_N_ESTIMATORS,
+    )
+    result = static_vs_adaptive_conformal_significance(report)
+
+    assert {"n_pairs", "statistic", "p_value", "static_error_mean", "adaptive_error_mean"}.issubset(result.keys())
+    if result["n_pairs"] >= 2:
+        assert np.isnan(result["p_value"]) or 0.0 <= result["p_value"] <= 1.0
+
+
+def test_static_vs_adaptive_conformal_significance_handles_too_few_pairs():
+    tiny_report = pd.DataFrame([{"segment": "pre_drift", "static_error": 0.05, "adaptive_error": 0.01}])
+    result = static_vs_adaptive_conformal_significance(tiny_report)
+    assert result["n_pairs"] < 2
+    assert np.isnan(result["p_value"])
