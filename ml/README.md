@@ -599,24 +599,21 @@ tier2_latency_ms)` is the number that actually matters once a Tier 2
 exists: every flow pays Tier 1's cost, only the escalated fraction
 additionally pays Tier 2's. Tier 2 (`tier2_reasoner/`) now exists -- its
 own orchestration overhead (retrieval + prompt building) measures at a
-negligible 0.58ms, but the real LLM call itself hasn't been measured live
-(no API access in the build environment; see
-`tier2_reasoner/README.md`'s "Known limitations"). Using the 3-5s/call
-estimate published for LLM-based SOC triage in the literature this
-project checked against (see [H1's literature
-verification](#open-set-escalation-experimental)), at this pipeline's
-real Tier 1 latency (9.67ms) and a 10% escalation budget:
+negligible 0.58ms. **The real LLM call itself is now measured, not
+estimated** -- 7 live Gemini 2.5 Flash calls during testing (see
+`tier2_reasoner/README.md`'s "Latency" section) gave a median of ~5,750ms,
+replacing the earlier 3-5s literature estimate. At this pipeline's real
+Tier 1 latency (9.67ms) and a 10% escalation budget:
 
 ```
-amortized = 9.67 + 0.10 * 3000..5000  =  ~309..509 ms/flow
+amortized = 9.67 + 0.10 * 5750  =  ~584 ms/flow
 ```
 
-That's 30-50x Tier 1's own latency -- the honest current answer, not a
-target hit. Getting to a genuinely "real-time" amortized latency means
+That's ~60x Tier 1's own latency -- slightly worse than the earlier
+estimate suggested, now backed by a real (if small, n=7) sample instead
+of a guess. Getting to a genuinely "real-time" amortized latency means
 either pushing the escalation budget well below 10%, or using a
-materially faster model for Tier 2, or both -- not something to claim
-solved until `tier2_reasoner`'s real LLM latency is actually measured and
-fed back into this formula.
+materially faster model for Tier 2, or both.
 
 ## Serving
 

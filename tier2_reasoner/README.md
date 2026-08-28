@@ -117,13 +117,20 @@ not on which implementation is behind it -- the same `--use-stub` pattern
   test in this module's test suite runs against, and what `serve.py`
   defaults to.
 - `AnthropicLLMClient` -- calls a real hosted model via the `anthropic`
-  package. **No API key or live network access to the API was available
-  in the environment this module was built in.** Its request/response
-  wiring is unit-tested by mocking the SDK client (`test_tier2_llm_client.py`
-  verifies the exact `messages.create` call shape and response parsing),
-  but it has not been exercised against a real API call. Treat it as
-  implemented-but-live-untested until you've run it yourself with real
-  credentials -- see [Known limitations](#known-limitations).
+  package. Connectivity and request wiring were confirmed live (real key,
+  real request, real structured error back) -- the account behind that
+  key had no credit balance, so no successful completion has been
+  observed from this client yet. Unit-tested by mocking the SDK client
+  otherwise. See [Known limitations](#known-limitations).
+- `GeminiLLMClient` -- calls a real hosted model via the `google-genai`
+  package. **Live-verified successfully** -- see
+  [Latency](#latency-live-verified) and [the RAG ablation
+  section](#--no-rag-the-rag-ablation-switch) below for real results from
+  real API calls, not estimates. Lower-friction to test than Anthropic:
+  Google AI Studio keys (https://aistudio.google.com/apikey) work on the
+  free tier immediately, no payment method required (rate-limited to 5
+  requests/minute per model on the free tier for `gemini-2.5-flash`,
+  confirmed by hitting that exact limit during testing).
 
 The response-parsing contract: the system prompt asks for a JSON object
 with exactly `suspected_technique_id`, `suspected_technique_name`,
@@ -133,19 +140,58 @@ to the raw text as `risk_explanation` with empty technique fields, since
 a degraded explanation is still more useful to an analyst than a dropped
 alert (verified in `test_tier2_reasoner.py`).
 
-## `--no-rag`: the RAG ablation switch
+**A real bug this live testing caught, that mocked tests couldn't have:**
+the first live Gemini call returned a perfectly correct JSON response
+wrapped in a ` ```json ... ``` ` markdown code fence, despite the system
+prompt explicitly asking for raw JSON only. `_parse_response` didn't
+anticipate that, so `json.loads` failed and the response fell through to
+the degraded (unparsed) fallback -- silently discarding a good structured
+response. Fixed by stripping a leading/trailing code fence before
+parsing; see `reasoner.py::_parse_response` and the regression tests
+`test_explain_strips_markdown_code_fence_around_json` /
+`test_explain_strips_bare_code_fence_without_language_tag`. This is
+exactly the kind of thing a stub client, by construction, cannot surface.
+
+## `--no-rag`: the RAG ablation switch (informal live result)
 
 `Tier2Reasoner(use_rag=False)` (or `serve.py --no-rag`) skips retrieval
 entirely -- the LLM gets no grounding context, just the alert's own
 fields. This exists for the H3 comparison the original research plan
-named (does RAG grounding actually improve explanation quality/accuracy
-vs. a bare LLM call) -- **not yet run**. Running it requires a real LLM
-client and some way to score explanation quality (human rating, or an
-LLM-judge setup), neither of which exists in this repo yet; the switch is
-built and tested (`test_tier2_reasoner.py::test_explain_without_rag_retrieves_nothing`),
-the actual comparison isn't.
+named: does RAG grounding actually change/improve the explanation, vs. a
+bare LLM call.
 
-## Latency
+**A small, real, live comparison has now been run** (not the full
+statistically-powered ablation this still needs, but a real first
+result, not a guess): 3 escalated alerts (Brute Force, DoS/DDoS,
+PortScan), each explained with RAG enabled and again with it disabled,
+against real Gemini 2.5 Flash calls.
+
+| | with RAG | without RAG |
+|---|---|---|
+| Brute Force | `T1110` (correct) | `""` -- explicitly declined, cited "no reference technique retrieved" |
+| DoS/DDoS | `T1498` (correct) | `""` -- same |
+| PortScan | `T1046` (correct) | `""` -- same |
+
+**5 of 5 RAG-enabled live calls across this and the connectivity-check
+run correctly named the technique this project's own knowledge base
+associates with that category. All 3 no-RAG calls correctly followed the
+system prompt's instruction not to invent a technique ID when none was
+retrieved**, instead reasoning qualitatively from the alert's own fields
+(e.g. citing PortScan's category name and describing "reconnaissance
+activity" without an ATT&CK ID). That's the real, observed effect of
+RAG here: specific, correct technique attribution vs. none at all, not
+a difference in how coherent the free-text reasoning reads.
+
+This is n=3 alerts, not a rigorous ablation -- no seeds, no significance
+test, no sample large enough to claim a statistically supported result.
+Turning this into H3 properly means running this same technique-ID-match
+comparison across many more escalated alerts (the mapping in
+`knowledge_base.py` makes "did it name the right technique" an
+automatable, countable outcome -- no human evaluation required for this
+specific proxy metric) with a paired significance test, the same
+treatment H1/H2 got in `ml/`. Not yet built.
+
+## Latency (live-verified)
 
 Orchestration overhead (retrieval + prompt construction, everything in
 this module *except* the LLM call itself), measured with
@@ -153,38 +199,52 @@ this module *except* the LLM call itself), measured with
 **0.581 ms/call**. Negligible, as expected -- TF-IDF cosine similarity
 over 7 short documents is not where the cost lives.
 
-**The real LLM call is the entire latency story here, and it is not
-measured in this repo** -- no API access was available to measure it
-live. Published estimates for LLM-based SOC alert triage put per-call
-latency at 3-5+ seconds (see the literature check in `ml/README.md`'s
-open-set section). Combined with `ml/README.md`'s measured Tier 1 latency
-(9.67ms median single-flow) and this project's 10% target escalation
-budget, `ids_ml.evaluation.amortized_latency_ms` gives:
+**The real LLM call dominates, and it is now measured, not estimated.**
+7 successful live Gemini 2.5 Flash calls (RAG-enabled) during testing:
+4,503 / 5,708 / 5,746 / 5,750 / 5,976 / 6,095 / 6,382 ms -- median
+**~5,750 ms**. 3 no-RAG calls: 4,482 / 4,504 / 6,912 ms -- median
+**~4,504 ms**, though n=3 is too small to say RAG meaningfully changes
+latency rather than just call-to-call variance; both sit in roughly the
+same 4.5-6.9s range. This lines up with (and now replaces) the earlier
+3-5s literature estimate for LLM-based SOC triage -- reality is if
+anything slightly higher.
+
+Combined with `ml/README.md`'s measured Tier 1 latency (9.67ms median
+single-flow) and this project's 10% target escalation budget,
+`ids_ml.evaluation.amortized_latency_ms` gives:
 
 ```
-amortized = 9.67 + 0.10 * tier2_latency_ms
+amortized = 9.67 + 0.10 * 5750  =  ~584 ms/flow
 ```
 
-At a 3-5s real LLM call, that's **~309-509ms amortized per flow** --
-roughly 30-50x Tier 1's own latency, dominated entirely by the escalated
-minority's LLM cost despite that minority being only 10% of traffic. This
-is the number a real deployment needs to measure and accept (or push the
-budget down, or use a faster/smaller model) before calling this
-architecture "real-time" without qualification -- run
-`ids_tier2.serve --llm anthropic` yourself with real credentials and feed
-the measured latency back into `amortized_latency_ms` to get a real
-number instead of this estimate.
+That's ~60x Tier 1's own latency -- worse than the earlier 309-509ms
+literature-based estimate, now backed by a real (if small) sample instead
+of a guess. Getting this pipeline to a genuinely "real-time" amortized
+latency means pushing the escalation budget well below 10%, or using a
+materially faster model for Tier 2, or both.
+
+Two operational realities observed live, worth planning around rather
+than treating as edge cases: a transient `503 UNAVAILABLE` ("model
+experiencing high demand") on one call, and a hard `429
+RESOURCE_EXHAUSTED` after 5 requests/minute on the free tier. Neither is
+handled with retry/backoff anywhere in this module yet -- `service.py`'s
+`process_alert` catches and logs any reasoner exception and moves on
+(skipping that alert), rather than retrying. Fine for a demo; a real
+deployment needs a retry policy for both, especially the rate limit if
+running above the free tier's request budget.
 
 ## Serving
 
 ```
-python -m ids_tier2.serve --bootstrap-servers localhost:9092 --llm anthropic
+python -m ids_tier2.serve --bootstrap-servers localhost:9092 --llm gemini
 ```
 
 `--use-stub` runs against in-memory stubs instead of a real Kafka broker.
-`--llm stub` (the default) needs no API key. `--no-rag` disables
-retrieval. `--top-k` controls how many techniques retrieval returns per
-alert (default 3).
+`--llm stub` (the default) needs no API key; `--llm gemini` (live-verified,
+free tier, no payment method needed) and `--llm anthropic` (implemented,
+connectivity-verified, no successful completion yet -- needs a funded
+account) are the real options. `--no-rag` disables retrieval. `--top-k`
+controls how many techniques retrieval returns per alert (default 3).
 
 ## Testing
 
@@ -193,26 +253,35 @@ pip install -r requirements.txt
 PYTHONPATH=src pytest
 ```
 
-49 tests, all passing, all against `StubLLMClient` (no network calls, no
-API key required) -- see [Known limitations](#known-limitations) for what
-that does and doesn't cover.
+54 tests, all passing, all against `StubLLMClient` (no network calls, no
+API key required, deterministic) -- separate from, and in addition to,
+the live Gemini calls described above under
+[Latency](#latency-live-verified) and the [RAG
+ablation](#--no-rag-the-rag-ablation-switch-informal-live-result), which
+were run manually and aren't part of the automated suite (no API key is
+available in CI).
 
 ## Known limitations
 
-- **`AnthropicLLMClient` has not been exercised against a real API
-  call.** Unit-tested via mocking, not integration-tested live -- no
-  credentials were available in the build environment. Test it yourself
-  before trusting it in any real deployment.
-- **Real LLM latency is estimated from published literature, not
-  measured in this repo.** See [Latency](#latency) -- the 3-5s figure is
-  someone else's number, not this project's own measurement.
+- **`AnthropicLLMClient` has connectivity confirmed but no successful
+  completion.** A real key reached the API and got a real structured
+  error back (insufficient credit balance) -- the request/response
+  wiring works, but this specific client's actual output has never been
+  observed. `GeminiLLMClient` has: see [Latency](#latency-live-verified).
+- **The H3 RAG ablation has a real n=3 live result, not the statistically
+  powered comparison H1/H2 got.** See [the ablation
+  section](#--no-rag-the-rag-ablation-switch-informal-live-result) for
+  what was actually run and what a proper version needs -- the
+  technique-ID-match proxy metric described there is buildable now and
+  doesn't need human evaluation, just more live calls.
 - **The knowledge base is 7 curated entries, not the full ATT&CK
   corpus**, and its category-to-technique mapping is this project's own
   reasonable association, not a verified ground truth -- see
   [Retrieval](#retrieval-why-tf-idf-not-embeddings).
-- **The RAG-vs-no-RAG ablation (H3) is built but not run** -- the
-  `--no-rag` switch exists and is tested; no explanation-quality
-  comparison between the two modes has actually been performed.
+- **No retry/backoff for transient LLM failures.** A live `503`
+  (transient overload) and `429` (rate limit) were both observed during
+  testing -- see [Latency](#latency-live-verified). `service.py` currently
+  just logs and skips the alert on any reasoner exception.
 - **No batching, no backpressure/retry wrapper on the explanation
   producer** -- see `explanation_producer.py`'s module docstring for why
   that's a documented scope reduction (the LLM call itself is the

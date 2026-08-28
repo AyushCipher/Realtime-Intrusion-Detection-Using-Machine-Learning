@@ -46,6 +46,35 @@ def test_explain_handles_malformed_llm_response_gracefully():
     assert explanation.recommended_action == ""
 
 
+def test_explain_strips_markdown_code_fence_around_json():
+    # Regression test: a real live Gemini 2.5 Flash call wrapped an
+    # otherwise-correct JSON response in a ```json fence despite the
+    # system prompt asking for raw JSON only -- this used to fall through
+    # to the degraded (unparsed) fallback and silently discard a good
+    # structured response.
+    fenced = (
+        '```json\n'
+        '{"suspected_technique_id": "T1110", "suspected_technique_name": "Brute Force", '
+        '"risk_explanation": "text", "recommended_action": "block the source IP"}\n'
+        '```'
+    )
+    client = StubLLMClient(fixed_response=fenced)
+    reasoner = Tier2Reasoner(client, use_rag=True)
+    explanation = reasoner.explain(_ALERT)
+
+    assert explanation.suspected_technique_id == "T1110"
+    assert explanation.suspected_technique_name == "Brute Force"
+    assert explanation.recommended_action == "block the source IP"
+
+
+def test_explain_strips_bare_code_fence_without_language_tag():
+    fenced = '```\n{"suspected_technique_id": "T1046"}\n```'
+    client = StubLLMClient(fixed_response=fenced)
+    reasoner = Tier2Reasoner(client, use_rag=True)
+    explanation = reasoner.explain(_ALERT)
+    assert explanation.suspected_technique_id == "T1046"
+
+
 def test_build_user_prompt_includes_confidence_and_severity():
     prompt = build_user_prompt(_ALERT, [])
     assert "Brute Force" in prompt

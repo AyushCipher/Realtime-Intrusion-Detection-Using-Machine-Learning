@@ -73,14 +73,13 @@ class AnthropicLLMClient(LLMClient):
 
     Requires `pip install anthropic` (already a listed dependency here)
     and an API key -- passed explicitly or read from the
-    `ANTHROPIC_API_KEY` environment variable by the SDK itself. **Neither
-    a key nor live network access to the API was available in the
-    environment this module was built in**, so this path is implemented
-    and unit-tested for its request/response wiring (see
-    `test_tier2_llm_client.py`, which mocks the SDK client) but has not
-    been exercised against a real API call -- see the module README's
-    known-limitations section before trusting this in production without
-    testing it yourself first.
+    `ANTHROPIC_API_KEY` environment variable by the SDK itself.
+    Connectivity and request wiring were confirmed live (real key, real
+    request, real 400 response) -- the account behind that key had no
+    credit balance, so no successful completion has been observed yet.
+    See the module README's known-limitations section for the current
+    status before trusting this in production without testing it
+    yourself first with a funded account.
     """
 
     def __init__(self, model: str = "claude-sonnet-5", api_key: Optional[str] = None, max_tokens: int = 512) -> None:
@@ -103,3 +102,38 @@ class AnthropicLLMClient(LLMClient):
         elapsed_ms = (time.perf_counter() - t0) * 1000.0
         text = "".join(block.text for block in response.content if getattr(block, "type", None) == "text")
         return LLMResponse(text=text, latency_ms=elapsed_ms, model_name=self.model)
+
+
+class GeminiLLMClient(LLMClient):
+    """Real hosted-model client via Google's unified `google-genai` SDK.
+
+    Requires `pip install google-genai` (listed in requirements.txt) and
+    an API key from https://aistudio.google.com/apikey -- passed
+    explicitly or read from the `GEMINI_API_KEY` environment variable by
+    the SDK itself. Defaults to a Flash model since, per Google AI
+    Studio's free-tier documentation, Flash models are free-tier-eligible
+    while Pro models require billing enabled even on a free-tier key --
+    added as a lower-friction alternative to `AnthropicLLMClient` (Google
+    AI Studio keys work on the free tier immediately with no payment
+    method, unlike the Anthropic Console).
+    """
+
+    def __init__(self, model: str = "gemini-2.5-flash", api_key: Optional[str] = None) -> None:
+        try:
+            from google import genai
+            from google.genai import types
+        except ImportError as e:  # pragma: no cover - exercised only when the package is absent
+            raise ImportError("GeminiLLMClient requires the 'google-genai' package: pip install google-genai") from e
+        self._client = genai.Client(api_key=api_key) if api_key else genai.Client()
+        self._types = types
+        self.model = model
+
+    def complete(self, system_prompt: str, user_prompt: str) -> LLMResponse:
+        t0 = time.perf_counter()
+        response = self._client.models.generate_content(
+            model=self.model,
+            contents=user_prompt,
+            config=self._types.GenerateContentConfig(system_instruction=system_prompt),
+        )
+        elapsed_ms = (time.perf_counter() - t0) * 1000.0
+        return LLMResponse(text=response.text or "", latency_ms=elapsed_ms, model_name=self.model)
