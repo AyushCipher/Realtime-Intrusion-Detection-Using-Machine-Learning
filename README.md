@@ -200,12 +200,13 @@ enough to say anything about detection quality or the dashboard's
 volume/severity views at any real scale.
 
 **Tier 2 reasoning (`tier2_reasoner/`) is real, tested, and standalone --
-not wired into this system.** It has its own passing test suite (49
-tests) and CLI, but: it's not in `docker-compose.yml`, `ml`'s
-Dockerfile/entrypoint don't build the `gate=`/`escalation_gate=` options
-needed to actually populate `escalated: true` alerts for the demo model,
-`dashboard-api` doesn't consume `network.ids.explanations`, and its LLM
-client has never been called against a real API (no credentials were
-available while building it -- see `tier2_reasoner/README.md`'s
-known-limitations section). `integration/test_e2e.py` does not exercise
-any of this.
+not wired into this system.** It has its own passing test suite (54
+tests) and CLI, and its LLM path has now been verified live against a
+real Gemini API key (real explanations, real measured latency ~5.75s
+median -- see `tier2_reasoner/README.md`'s "Latency" section), though not
+yet at any statistically meaningful scale. Still missing: it's not in
+`docker-compose.yml`, `ml`'s Dockerfile/entrypoint don't build the
+`gate=`/`escalation_gate=` options needed to actually populate
+`escalated: true` alerts for the demo model, and `dashboard-api` doesn't
+consume `network.ids.explanations`. `integration/test_e2e.py` does not
+exercise any of this.

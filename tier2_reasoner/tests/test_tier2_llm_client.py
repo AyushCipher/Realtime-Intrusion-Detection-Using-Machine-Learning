@@ -2,7 +2,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from ids_tier2.llm_client import AnthropicLLMClient, LLMResponse, StubLLMClient
+from ids_tier2.llm_client import AnthropicLLMClient, GeminiLLMClient, LLMResponse, StubLLMClient
 
 
 def test_stub_llm_client_extracts_technique_from_prompt():
@@ -77,3 +77,50 @@ def test_anthropic_client_calls_messages_create_and_parses_text_blocks():
     assert response.text == '{"suspected_technique_id": "T1190"}'
     assert response.model_name == "claude-sonnet-5"
     assert response.latency_ms >= 0
+
+
+def test_gemini_client_requires_the_package_or_raises_clear_error():
+    # google-genai IS installed in this project's environment (needed for
+    # the live-verified path), so this tests the wiring by forcing the
+    # import to fail rather than actually uninstalling anything.
+    with patch.dict("sys.modules", {"google": None, "google.genai": None}):
+        with pytest.raises(ImportError):
+            GeminiLLMClient()
+
+
+def test_gemini_client_calls_generate_content_and_returns_text():
+    from google import genai
+
+    mock_response = MagicMock()
+    mock_response.text = '{"suspected_technique_id": "T1190"}'
+    mock_instance = MagicMock()
+    mock_instance.models.generate_content.return_value = mock_response
+
+    with patch.object(genai, "Client", return_value=mock_instance) as mock_client_cls:
+        client = GeminiLLMClient(model="gemini-2.5-flash", api_key="test-key")
+        response = client.complete("system prompt", "user prompt")
+
+    mock_client_cls.assert_called_once_with(api_key="test-key")
+    mock_instance.models.generate_content.assert_called_once()
+    call_kwargs = mock_instance.models.generate_content.call_args.kwargs
+    assert call_kwargs["model"] == "gemini-2.5-flash"
+    assert call_kwargs["contents"] == "user prompt"
+    assert call_kwargs["config"].system_instruction == "system prompt"
+    assert response.text == '{"suspected_technique_id": "T1190"}'
+    assert response.model_name == "gemini-2.5-flash"
+    assert response.latency_ms >= 0
+
+
+def test_gemini_client_handles_empty_response_text():
+    from google import genai
+
+    mock_response = MagicMock()
+    mock_response.text = None
+    mock_instance = MagicMock()
+    mock_instance.models.generate_content.return_value = mock_response
+
+    with patch.object(genai, "Client", return_value=mock_instance):
+        client = GeminiLLMClient(api_key="test-key")
+        response = client.complete("system", "user")
+
+    assert response.text == ""

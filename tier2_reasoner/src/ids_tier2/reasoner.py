@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import json
 import logging
+import re
 from dataclasses import dataclass
 from typing import Any, Dict, List, Optional
 
@@ -108,8 +109,21 @@ class Tier2Reasoner:
 
     @staticmethod
     def _parse_response(text: str) -> Dict[str, str]:
+        # Strip a leading/trailing markdown code fence (```json ... ``` or
+        # ``` ... ```) before parsing -- a common LLM habit even when the
+        # system prompt explicitly asks for raw JSON only. Caught live: a
+        # real Gemini 2.5 Flash response wrapped otherwise-correct JSON in
+        # a ```json fence, which fell through to the degraded fallback
+        # below and silently discarded a perfectly good structured
+        # response until this was added.
+        cleaned = text.strip()
+        if cleaned.startswith("```"):
+            cleaned = re.sub(r"^```[a-zA-Z]*\n?", "", cleaned)
+            cleaned = re.sub(r"\n?```$", "", cleaned)
+            cleaned = cleaned.strip()
+
         try:
-            parsed = json.loads(text)
+            parsed = json.loads(cleaned)
             if not isinstance(parsed, dict):
                 raise ValueError("expected a JSON object")
             return {k: str(v) for k, v in parsed.items()}

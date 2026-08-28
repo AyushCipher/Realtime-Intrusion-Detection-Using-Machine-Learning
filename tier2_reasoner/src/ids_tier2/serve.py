@@ -5,10 +5,13 @@ and publishing explanations.
 
 `--use-stub` runs against in-memory stubs instead of a real Kafka broker.
 `--llm` selects the LLM client ("stub", the default -- no API key needed;
-or "anthropic", which requires `pip install anthropic` and
-`ANTHROPIC_API_KEY` set). `--no-rag` disables retrieval (the H3 ablation
-switch: does grounding the LLM in retrieved ATT&CK context actually
-improve explanation quality, vs. a bare LLM call).
+"anthropic", which requires `pip install anthropic` and
+`ANTHROPIC_API_KEY` set; or "gemini", which requires `pip install
+google-genai` and `GEMINI_API_KEY` set -- a lower-friction option since
+Google AI Studio keys work on the free tier immediately with no payment
+method). `--no-rag` disables retrieval (the H3 ablation switch: does
+grounding the LLM in retrieved ATT&CK context actually improve
+explanation quality, vs. a bare LLM call).
 """
 
 from __future__ import annotations
@@ -19,7 +22,7 @@ import sys
 
 from .alert_consumer import KafkaEscalatedAlertSource, StubEscalatedAlertSource
 from .explanation_producer import KafkaExplanationProducer, StubExplanationProducer
-from .llm_client import AnthropicLLMClient, StubLLMClient
+from .llm_client import AnthropicLLMClient, GeminiLLMClient, StubLLMClient
 from .reasoner import Tier2Reasoner
 from .schema import ALERT_TOPIC, EXPLANATION_TOPIC
 from .service import Tier2Service
@@ -33,8 +36,9 @@ def parse_args(argv=None) -> argparse.Namespace:
     parser.add_argument("--alert-topic", default=ALERT_TOPIC)
     parser.add_argument("--explanation-topic", default=EXPLANATION_TOPIC)
     parser.add_argument("--use-stub", action="store_true", help="Use in-memory stubs instead of Kafka")
-    parser.add_argument("--llm", choices=["stub", "anthropic"], default="stub")
+    parser.add_argument("--llm", choices=["stub", "anthropic", "gemini"], default="stub")
     parser.add_argument("--anthropic-model", default="claude-sonnet-5")
+    parser.add_argument("--gemini-model", default="gemini-2.5-flash")
     parser.add_argument("--no-rag", action="store_true", help="Disable retrieval (bare-LLM ablation)")
     parser.add_argument("--top-k", type=int, default=3, help="Retrieved technique count when RAG is enabled")
     parser.add_argument("-v", "--verbose", action="store_true")
@@ -50,6 +54,8 @@ def main(argv=None) -> int:
 
     if args.llm == "anthropic":
         llm_client = AnthropicLLMClient(model=args.anthropic_model)
+    elif args.llm == "gemini":
+        llm_client = GeminiLLMClient(model=args.gemini_model)
     else:
         llm_client = StubLLMClient()
 
