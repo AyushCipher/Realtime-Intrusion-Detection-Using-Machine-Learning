@@ -1,24 +1,26 @@
 # Realtime Intrusion Detection Using Machine Learning
 
-A real-time network intrusion detection system built as independently
-authored, independently testable modules. The first three are wired
-together here into one running system; a fourth (Tier 2 reasoning) exists
-and is tested standalone but is **not yet wired into the running system
-below** -- see its own README's known-limitations section.
+A real-time network intrusion detection system built as four
+independently authored, independently testable modules, wired together
+into one running system in `docker-compose.yml` -- though "wired
+together" for Tier 2 specifically means "unit-tested and live-LLM-tested
+in isolation, and the compose/schema/dashboard plumbing connects it,"
+**not** "verified end-to-end via a real `docker compose up`" -- see
+"What integration found" below and the Known limitations section for
+exactly what has and hasn't been confirmed running together for real.
 
 | Module | Folder | What it does |
 |---|---|---|
 | Ingestion | [`ingestion/`](ingestion/README.md) | Live/pcap-replay packet capture -> sliding-window flow feature extraction -> publishes to Kafka |
-| ML detection | [`ml/`](ml/README.md) | Consumes flow features -> two-stage detector (Isolation Forest + XGBoost) + optional open-set escalation gate -> SHAP explanations -> publishes alerts to Kafka |
-| Dashboard/API | [`dashboard-api/`](dashboard-api/README.md) | Consumes alerts -> FastAPI REST/WebSocket API -> React triage dashboard |
-| Tier 2 reasoning (standalone) | [`tier2_reasoner/`](tier2_reasoner/README.md) | Consumes `ml`'s escalated alerts -> RAG over MITRE ATT&CK -> LLM explanation -> publishes to its own topic. Not yet in `docker-compose.yml`. |
+| ML detection | [`ml/`](ml/README.md) | Consumes flow features -> two-stage detector (Isolation Forest + XGBoost) + open-set escalation gate -> SHAP explanations -> publishes alerts to Kafka |
+| Dashboard/API | [`dashboard-api/`](dashboard-api/README.md) | Consumes alerts + Tier 2 explanations -> FastAPI REST/WebSocket API -> React triage dashboard (severity, escalation, Tier 2 analysis) |
+| Tier 2 reasoning | [`tier2_reasoner/`](tier2_reasoner/README.md) | Consumes `ml`'s escalated alerts -> RAG over MITRE ATT&CK -> LLM explanation -> publishes to its own topic |
 
 Each module folder has its own README with that module's design decisions
 and a "known limitations" section written from inside that module. This
-file is the integration layer for the three that are actually wired
-together below: how they run together, the true (verified, not assumed)
-schema they agree on, and what broke and got fixed only once they were
-wired up for real.
+file is the integration layer on top: how the four actually run together,
+the true (verified, not assumed) schema they agree on, and what broke and
+got fixed only once they were wired up for real.
 
 ## Architecture
 
@@ -142,20 +144,26 @@ broker together surfaced two real bugs that no module's own test suite
 ingestion/        packet capture, flow extraction, Kafka producer (+ its own README/tests)
 ml/                two-stage detector, SHAP, open-set escalation gate, Kafka consumer+producer (+ its own README/tests)
 dashboard-api/     FastAPI backend + React frontend (+ its own README/tests)
-tier2_reasoner/    RAG + LLM escalation reasoning (+ its own README/tests) -- standalone, not in docker-compose.yml yet
-integration/       test_e2e.py -- the full-stack check described above (covers the first three modules only)
-docker-compose.yml the shared broker + the first three services (tier2_reasoner is not included)
-SCHEMA.md          reconciled, verified Kafka topic schemas (network.ids.explanations documented, but tier2_reasoner isn't wired into the running system yet)
+tier2_reasoner/    RAG + LLM escalation reasoning (+ its own README/tests)
+integration/       test_e2e.py -- the full-stack check described above (covers the first three modules only -- see Known limitations)
+docker-compose.yml the shared broker + all four services
+SCHEMA.md          reconciled, verified Kafka topic schemas, including network.ids.explanations
 ```
 
-Everything at the top level (`docker-compose.yml`, per-service
-`Dockerfile`s and `docker-entrypoint.sh` scripts, `SCHEMA.md`,
-`integration/`, this file) is integration glue added on top of the three
-modules. No code inside `ingestion/src`, `ml/src`, `dashboard-api/src`, or
-`dashboard-api/frontend/src` was changed to make the system integrate --
-where a module's own file needed touching at all (see "What integration
-found" above), it was a docker-compose environment setting, not application
-code.
+Unlike the original three-module integration (where no module's own code
+needed changing -- see "What integration found" above), wiring Tier 2 in
+*did* require real application-code changes, not just compose/environment
+glue: `ml/src` gained the ability to fit, calibrate, save, and load an
+open-set gate (`ids_ml.train --gate` / `ids_ml.serve` auto-loading it) so
+the demo model actually produces `escalated: true` alerts instead of only
+being capable of it in principle; `dashboard-api/src` and
+`dashboard-api/frontend/src` gained a second Kafka consumer, storage
+table, REST endpoint, and UI panel to actually consume and display
+`network.ids.explanations`. This is called out explicitly because it's a
+deliberate departure from the "integration never touches module code"
+principle the first three modules established -- Tier 2's existence
+*is* new capability those modules didn't have before, not a
+config-only wiring exercise.
 
 ## Known limitations
 
@@ -199,22 +207,37 @@ wiring end-to-end (which is what `integration/test_e2e.py` checks), not
 enough to say anything about detection quality or the dashboard's
 volume/severity views at any real scale.
 
-**Tier 2 reasoning (`tier2_reasoner/`) is real, tested, and standalone --
-not wired into this system, and its own live testing found it is not
-currently reliable or fast enough to call real-time.** It has its own
-passing test suite (54 tests) and CLI, and its LLM path has now been
+**Tier 2 reasoning (`tier2_reasoner/`) is now wired into this system --
+`docker-compose.yml` includes it, `ml`'s demo model is trained with the
+`openset` gate so it actually produces `escalated: true` alerts, and
+`dashboard-api` consumes `network.ids.explanations` and surfaces
+`unknown_mass`/`escalated`/Tier 2 explanations in the dashboard (REST +
+live WebSocket) -- but its own live testing found it is not currently
+reliable or fast enough to call real-time.** Its LLM path has been
 verified live against two real API keys: 9/9 completed RAG-enabled calls
 correctly named the right MITRE technique (a real, consistent, positive
-signal), but a real batch run also surfaced the honest problem --
-2 of 6 calls in one batch failed outright even after retries, all 6
-no-RAG calls in that same batch failed too, and the calls that did
-succeed took 23.5-60.4 seconds each (vs. 2.6s for an earlier isolated
-call) -- see `tier2_reasoner/README.md`'s "Latency (live-verified -- and
-a reliability problem)" section. The batch-measured amortized latency is
-~4,056ms/flow (~420x Tier 1's own latency), not the ~584ms an earlier
-single fast call suggested. No retry/backoff logic exists in the module
-yet. Also still missing: it's not in `docker-compose.yml`, `ml`'s
-Dockerfile/entrypoint don't build the `gate=`/`escalation_gate=` options
-needed to actually populate `escalated: true` alerts for the demo model,
-and `dashboard-api` doesn't consume `network.ids.explanations`.
-`integration/test_e2e.py` does not exercise any of this.
+signal), but a real batch run also surfaced the honest problem -- 2 of 6
+calls in one batch failed outright even after retries, all 6 no-RAG calls
+in that same batch failed too, and the calls that did succeed took
+23.5-60.4 seconds each (vs. 2.6s for an earlier isolated call) -- see
+`tier2_reasoner/README.md`'s "Latency (live-verified -- and a reliability
+problem)" section. The batch-measured amortized latency is ~4,056ms/flow
+(~420x Tier 1's own latency), not the ~584ms an earlier single fast call
+suggested. `tier2_reasoner` now has retry/backoff logic
+(`RetryingLLMClient`), built directly from that failure, but it has not
+yet been re-tested against the same live failure conditions that exposed
+the need for it.
+
+**What "wired in" does and doesn't mean here:** every piece above was
+built, unit-tested (241 tests passing across all four modules combined),
+and the `ids_ml.train --gate openset` / `docker compose config` steps
+were verified to actually run and produce correct output. **A full
+`docker compose up --build` of the whole system, and a real browser
+check of the new dashboard UI, were not performed** -- the Docker daemon
+was not running in the environment this was built in (the CLI is
+present; `docker compose build` failed to connect to it). `docker compose
+config` (which only parses/resolves the compose file, no daemon needed)
+did succeed. Run `docker compose up -d --build` yourself to get the
+end-to-end verification this repo's own philosophy says matters more
+than any individual module's tests -- see "What integration found" above
+for why.

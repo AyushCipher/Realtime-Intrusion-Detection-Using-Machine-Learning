@@ -11,6 +11,7 @@ export default function AlertRow({ alert, onSelect }: { alert: Alert; onSelect: 
       </span>
       <span className="alert-row-confidence">{(alert.stage2_confidence * 100).toFixed(0)}%</span>
       <span className="alert-row-time">{new Date(alert.scored_at * 1000).toLocaleTimeString()}</span>
+      <span className="alert-row-escalated">{alert.escalated && <span className="escalated-badge">ESC</span>}</span>
       <span className={`alert-row-triage triage-${alert.triage_status}`}>{alert.triage_status.replace("_", " ")}</span>
     </button>
   );

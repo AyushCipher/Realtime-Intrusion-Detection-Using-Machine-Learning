@@ -20,6 +20,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Sequence
 
+import joblib
 import numpy as np
 
 
@@ -31,6 +32,14 @@ class ConformalGate:
 
     def should_escalate(self, unknown_mass: float) -> bool:
         return unknown_mass > self.threshold
+
+    def save(self, path) -> None:
+        joblib.dump({"threshold": self.threshold, "budget": self.budget, "n_calibration": self.n_calibration}, path)
+
+    @classmethod
+    def load(cls, path) -> "ConformalGate":
+        payload = joblib.load(path)
+        return cls(**payload)
 
 
 def calibrate_threshold(unknown_mass_scores: Sequence[float], budget: float) -> ConformalGate:

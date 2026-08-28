@@ -16,7 +16,14 @@ ENV PYTHONPATH=/app/src
 # own test suite (see ml/README.md: this repo does not ship real
 # CICIDS2017/2018 data). This is a demo-quality model, not a production one
 # -- see the top-level README's known-limitations section.
+#
+# --gate openset fits and calibrates the OpenMax escalation gate (see
+# ml/README.md's "Open-set escalation" section) so this demo actually
+# produces escalated: true alerts for tier2_reasoner to consume, instead
+# of running the closed-set-only cascade. --escalation-budget 0.1 matches
+# the budget used throughout this project's H1/H2 evaluation.
 RUN python -m ids_ml.train --data /app/training_data.csv --model-dir /app/models \
-    --stage1-contamination 0.35 --skip-leakage-check --skip-robustness-probe
+    --stage1-contamination 0.35 --skip-leakage-check --skip-robustness-probe \
+    --gate openset --escalation-budget 0.1
 
 ENTRYPOINT ["/app/docker-entrypoint.sh"]

@@ -264,8 +264,19 @@ stage-1-flagged rows into a three-way decision instead:
 - **known-benign** -- stage 2 (recalibrated) says BENIGN.
 - **known-attack** -- stage 2 (recalibrated) confidently predicts a known family.
 - **escalated** -- the gate's `unknown_mass` exceeds a calibrated threshold; this
-  is the fraction of flagged traffic a downstream tier (not yet built --
-  see below) would receive.
+  is the fraction of flagged traffic the downstream Tier 2 LLM/RAG service
+  (`tier2_reasoner/`) receives.
+
+**CLI usage:** `python -m ids_ml.train --gate {softmax,openset}
+--escalation-budget 0.1 ...` fits and calibrates the chosen gate on the
+validation split (held out from stage1/stage2's own fitting -- see
+`train.py`'s module docstring for why calibrating there specifically
+avoids the leakage `evaluation.py`'s functions are already careful
+about) and saves it alongside the models. `python -m ids_ml.serve`
+auto-detects and loads a saved gate with no separate flag needed -- the
+gate type is a property of the trained artifacts, not a serving-time
+choice. Omitting `--gate` (the default) reproduces the original
+closed-set-only behavior exactly.
 
 Two interchangeable gates, both producing the same
 `(predicted_class, known_class_probabilities, unknown_mass)` shape:

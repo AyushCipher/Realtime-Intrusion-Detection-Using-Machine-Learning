@@ -7,7 +7,7 @@ from dataclasses import dataclass, field
 from typing import List
 
 from .auth import DEFAULT_WS_TOKEN_TTL_SECONDS
-from .schema import ALERT_TOPIC
+from .schema import ALERT_TOPIC, EXPLANATION_TOPIC
 
 
 def _env_bool(name: str, default: bool = False) -> bool:
@@ -21,6 +21,7 @@ def _env_bool(name: str, default: bool = False) -> bool:
 class Settings:
     bootstrap_servers: List[str] = field(default_factory=lambda: ["localhost:9092"])
     alert_topic: str = ALERT_TOPIC
+    explanation_topic: str = EXPLANATION_TOPIC
     db_path: str = "alerts.db"
     use_stub_source: bool = False
     ws_token_ttl_seconds: float = DEFAULT_WS_TOKEN_TTL_SECONDS
@@ -33,6 +34,7 @@ class Settings:
         return cls(
             bootstrap_servers=[s.strip() for s in servers.split(",") if s.strip()],
             alert_topic=os.environ.get("IDS_DASHBOARD_ALERT_TOPIC", ALERT_TOPIC),
+            explanation_topic=os.environ.get("IDS_DASHBOARD_EXPLANATION_TOPIC", EXPLANATION_TOPIC),
             db_path=os.environ.get("IDS_DASHBOARD_DB_PATH", "alerts.db"),
             use_stub_source=_env_bool("IDS_DASHBOARD_USE_STUB"),
             ws_token_ttl_seconds=float(os.environ.get("IDS_DASHBOARD_WS_TOKEN_TTL", str(DEFAULT_WS_TOKEN_TTL_SECONDS))),

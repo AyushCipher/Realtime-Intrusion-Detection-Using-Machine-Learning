@@ -36,6 +36,9 @@ CREATE TABLE IF NOT EXISTS alerts (
     stage2_class_probabilities TEXT NOT NULL,
     severity TEXT NOT NULL,
     explanation TEXT NOT NULL,
+    unknown_mass REAL NOT NULL DEFAULT 0.0,
+    escalated INTEGER NOT NULL DEFAULT 0,
+    escalation_trigger TEXT NOT NULL DEFAULT '',
     model_version TEXT NOT NULL,
     schema_version INTEGER NOT NULL,
     received_at REAL NOT NULL,
@@ -47,15 +50,51 @@ CREATE INDEX IF NOT EXISTS idx_alerts_scored_at ON alerts(scored_at);
 CREATE INDEX IF NOT EXISTS idx_alerts_severity ON alerts(severity);
 CREATE INDEX IF NOT EXISTS idx_alerts_class ON alerts(stage2_predicted_class);
 CREATE INDEX IF NOT EXISTS idx_alerts_triage ON alerts(triage_status);
+CREATE INDEX IF NOT EXISTS idx_alerts_escalated ON alerts(escalated);
+
+-- Tier 2 (tier2_reasoner) explanations, joined to alerts by alert_id.
+-- Not every alert has one: only escalated alerts are ever sent to Tier 2
+-- at all (see tier2_reasoner/README.md), and even those may not have a
+-- matching row yet by the time an analyst looks -- Tier 2's real
+-- measured latency is 5-40+ seconds per alert (see ml/README.md's
+-- Latency section), so "escalated but no explanation yet" is an expected,
+-- normal state, not a bug.
+CREATE TABLE IF NOT EXISTS explanations (
+    explanation_id TEXT PRIMARY KEY,
+    alert_id TEXT NOT NULL,
+    flow_id TEXT NOT NULL,
+    generated_at REAL NOT NULL,
+    suspected_technique_id TEXT NOT NULL,
+    suspected_technique_name TEXT NOT NULL,
+    risk_explanation TEXT NOT NULL,
+    recommended_action TEXT NOT NULL,
+    retrieved_technique_ids TEXT NOT NULL,
+    rag_enabled INTEGER NOT NULL,
+    llm_latency_ms REAL NOT NULL,
+    model_version TEXT NOT NULL,
+    schema_version INTEGER NOT NULL,
+    received_at REAL NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_explanations_alert_id ON explanations(alert_id);
 """
 
 _JSON_FIELDS = ("stage2_class_probabilities", "explanation")
+_EXPLANATION_JSON_FIELDS = ("retrieved_technique_ids",)
 
 
 def _row_to_dict(row: sqlite3.Row) -> Dict[str, Any]:
     d = dict(row)
     d["stage1_flagged"] = bool(d["stage1_flagged"])
+    d["escalated"] = bool(d["escalated"])
     for field in _JSON_FIELDS:
+        d[field] = json.loads(d[field])
+    return d
+
+
+def _explanation_row_to_dict(row: sqlite3.Row) -> Dict[str, Any]:
+    d = dict(row)
+    d["rag_enabled"] = bool(d["rag_enabled"])
+    for field in _EXPLANATION_JSON_FIELDS:
         d[field] = json.loads(d[field])
     return d
 
@@ -80,9 +119,9 @@ class AlertStore:
                     alert_id, flow_id, src_ip, src_port, dst_ip, dst_port, protocol,
                     flow_start_time, scored_at, stage1_anomaly_score, stage1_flagged,
                     stage2_predicted_class, stage2_confidence, stage2_class_probabilities,
-                    severity, explanation, model_version, schema_version, received_at,
-                    triage_status
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'new')
+                    severity, explanation, unknown_mass, escalated, escalation_trigger,
+                    model_version, schema_version, received_at, triage_status
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'new')
                 """,
                 (
                     alert["alert_id"],
@@ -101,6 +140,9 @@ class AlertStore:
                     json.dumps(alert["stage2_class_probabilities"]),
                     alert["severity"],
                     json.dumps(alert["explanation"]),
+                    alert["unknown_mass"],
+                    int(alert["escalated"]),
+                    alert["escalation_trigger"],
                     alert["model_version"],
                     alert["schema_version"],
                     time.time(),
@@ -108,6 +150,55 @@ class AlertStore:
             )
             self._conn.commit()
             return cursor.rowcount > 0
+
+    def insert_explanation(self, explanation: Dict[str, Any]) -> bool:
+        """Inserts one Tier 2 explanation (schema.EXPLANATION_EVENT_FIELDS
+        shape). Returns False without erroring on a duplicate
+        explanation_id, same redelivery tolerance as insert_alert. Does
+        NOT require the referenced alert_id to already exist in `alerts`
+        -- Kafka delivery order between the two topics isn't guaranteed,
+        so an explanation could in principle arrive first."""
+        with self._lock:
+            cursor = self._conn.execute(
+                """
+                INSERT OR IGNORE INTO explanations (
+                    explanation_id, alert_id, flow_id, generated_at,
+                    suspected_technique_id, suspected_technique_name,
+                    risk_explanation, recommended_action, retrieved_technique_ids,
+                    rag_enabled, llm_latency_ms, model_version, schema_version, received_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    explanation["explanation_id"],
+                    explanation["alert_id"],
+                    explanation["flow_id"],
+                    explanation["generated_at"],
+                    explanation["suspected_technique_id"],
+                    explanation["suspected_technique_name"],
+                    explanation["risk_explanation"],
+                    explanation["recommended_action"],
+                    json.dumps(explanation["retrieved_technique_ids"]),
+                    int(explanation["rag_enabled"]),
+                    explanation["llm_latency_ms"],
+                    explanation["model_version"],
+                    explanation["schema_version"],
+                    time.time(),
+                ),
+            )
+            self._conn.commit()
+            return cursor.rowcount > 0
+
+    def get_explanation_for_alert(self, alert_id: str) -> Optional[Dict[str, Any]]:
+        """Returns the most recent explanation for this alert_id, or None
+        if Tier 2 hasn't produced one (yet, or ever -- e.g. the alert
+        wasn't escalated). Most recent, not "the" explanation, since
+        nothing in this system's contract guarantees exactly one per
+        alert."""
+        with self._lock:
+            row = self._conn.execute(
+                "SELECT * FROM explanations WHERE alert_id = ? ORDER BY generated_at DESC LIMIT 1", (alert_id,)
+            ).fetchone()
+        return _explanation_row_to_dict(row) if row is not None else None
 
     def get_alert(self, alert_id: str) -> Optional[Dict[str, Any]]:
         with self._lock:
@@ -121,6 +212,7 @@ class AlertStore:
         start_time: Optional[float],
         end_time: Optional[float],
         triage_status: Optional[str],
+        escalated: Optional[bool] = None,
     ):
         clauses: List[str] = []
         params: List[Any] = []
@@ -139,6 +231,9 @@ class AlertStore:
         if triage_status is not None:
             clauses.append("triage_status = ?")
             params.append(triage_status)
+        if escalated is not None:
+            clauses.append("escalated = ?")
+            params.append(int(escalated))
         where = f"WHERE {' AND '.join(clauses)}" if clauses else ""
         return where, params
 
@@ -149,10 +244,11 @@ class AlertStore:
         start_time: Optional[float] = None,
         end_time: Optional[float] = None,
         triage_status: Optional[str] = None,
+        escalated: Optional[bool] = None,
         limit: int = 50,
         offset: int = 0,
     ) -> List[Dict[str, Any]]:
-        where, params = self._where_clause(severity, attack_type, start_time, end_time, triage_status)
+        where, params = self._where_clause(severity, attack_type, start_time, end_time, triage_status, escalated)
         query = f"SELECT * FROM alerts {where} ORDER BY scored_at DESC LIMIT ? OFFSET ?"
         with self._lock:
             rows = self._conn.execute(query, (*params, limit, offset)).fetchall()
@@ -165,8 +261,9 @@ class AlertStore:
         start_time: Optional[float] = None,
         end_time: Optional[float] = None,
         triage_status: Optional[str] = None,
+        escalated: Optional[bool] = None,
     ) -> int:
-        where, params = self._where_clause(severity, attack_type, start_time, end_time, triage_status)
+        where, params = self._where_clause(severity, attack_type, start_time, end_time, triage_status, escalated)
         query = f"SELECT COUNT(*) FROM alerts {where}"
         with self._lock:
             (count,) = self._conn.execute(query, params).fetchone()

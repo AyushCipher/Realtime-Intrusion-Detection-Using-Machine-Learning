@@ -2,7 +2,7 @@ from pathlib import Path
 
 import pytest
 
-from ids_ml.conformal_gate import calibrate_threshold
+from ids_ml.conformal_gate import ConformalGate, calibrate_threshold
 from ids_ml.data import load_and_map
 from ids_ml.features import CANONICAL_FEATURE_COLUMNS
 from ids_ml.openset_head import OpenMaxConfig, OpenMaxHead
@@ -162,3 +162,48 @@ def test_two_stage_detector_with_gate_and_escalation_gate_routes_three_ways():
         if r.escalated:
             assert r.decision == "escalated"
             assert r.unknown_mass > escalation_gate.threshold
+
+
+# --- Save/load round trips (needed to persist a fitted gate between
+# ids_ml.train (fits + calibrates) and ids_ml.serve (loads + scores)) ----
+
+
+def test_openmax_head_save_load_round_trip(tmp_path):
+    df = load_and_map(FIXTURE_PATH)
+    train, _val, test = time_based_split(df, train_frac=0.7, val_frac=0.15)
+    stage2 = _fit_stage2(train)
+
+    X_train = train[CANONICAL_FEATURE_COLUMNS].to_numpy()
+    y_train = train["attack_category"].tolist()
+    head = OpenMaxHead(stage2, OpenMaxConfig(tail_size=10, alpha_ranks=3)).fit(X_train, y_train)
+
+    path = tmp_path / "openset_gate.joblib"
+    head.save(path)
+    loaded = OpenMaxHead.load(path, stage2)
+
+    X_test = test[CANONICAL_FEATURE_COLUMNS].to_numpy()
+    original_results = head.recalibrate_batch(X_test)
+    loaded_results = loaded.recalibrate_batch(X_test)
+
+    assert [r.predicted_class for r in loaded_results] == [r.predicted_class for r in original_results]
+    for a, b in zip(original_results, loaded_results):
+        assert a.unknown_mass == pytest.approx(b.unknown_mass)
+
+
+def test_openmax_head_load_requires_fit_first_to_save():
+    stage2_stub = _fit_stage2(load_and_map(FIXTURE_PATH))
+    head = OpenMaxHead(stage2_stub)
+    with pytest.raises(RuntimeError):
+        head.save("unused-path.joblib")
+
+
+def test_conformal_gate_save_load_round_trip(tmp_path):
+    gate = calibrate_threshold([0.1, 0.2, 0.3, 0.4, 0.5], budget=0.2)
+    path = tmp_path / "escalation_gate.joblib"
+    gate.save(path)
+    loaded = ConformalGate.load(path)
+
+    assert loaded.threshold == pytest.approx(gate.threshold)
+    assert loaded.budget == pytest.approx(gate.budget)
+    assert loaded.n_calibration == gate.n_calibration
+    assert loaded.should_escalate(gate.threshold + 0.01) is True
