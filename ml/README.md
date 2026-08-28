@@ -563,6 +563,61 @@ IPs an explicit recon -> brute-force -> DoS/exfiltration campaign, since the
 main fixture's near-unique per-row IPs give no per-source-IP history to
 window over).
 
+## Latency and real-time feasibility
+
+`evaluation.latency_report` measures `pipeline.TwoStageDetector.score`'s
+inference latency the way DQN-IDS's own runtime table does (arXiv, NDSS
+SDIoTSec 2026): warm-up calls discarded, then median/p95/p99 over
+single-flow calls -- how `scoring_service.ScoringService.process_event`
+actually calls it, one flow per Kafka message -- plus a batched number.
+
+Measured on real CSE-CIC-IDS2018 (stage1 n_estimators=200, stage2
+n_estimators=300, 50,048-row test split):
+
+| | single-flow | batched (128 rows/call) |
+|---|---|---|
+| median | 9.67 ms | 17.99 ms per batch |
+| p95 | 15.03 ms | -- |
+| p99 | 16.41 ms | -- |
+| throughput | **103/sec** | **7,116/sec** |
+
+The 68x gap between single-flow and batched throughput is the real
+finding here, not either number alone: Python/XGBoost/sklearn's per-call
+overhead dominates at batch size 1, and `ScoringService` currently calls
+`detector.score()` on exactly one row per Kafka message (see
+`process_event` in `scoring_service.py`) -- meaning **103 flows/sec is
+this pipeline's actual live throughput ceiling today**, not 7,116/sec,
+unless a batching layer is added in front of `score()`. This is
+meaningfully slower per-flow than DQN-IDS's own reported numbers (CNN
+0.52ms/1,917 samples/s, DQN 0.024ms/41,500 samples/s) -- expected, since
+Isolation Forest + a 300-tree XGBoost classifier is a heavier per-call
+computation than DQN-IDS's lightweight CNN+DQN, and worth stating plainly
+rather than leaving implicit.
+
+`evaluation.amortized_latency_ms(tier1_median_ms, escalation_rate,
+tier2_latency_ms)` is the number that actually matters once a Tier 2
+exists: every flow pays Tier 1's cost, only the escalated fraction
+additionally pays Tier 2's. Tier 2 (`tier2_reasoner/`) now exists -- its
+own orchestration overhead (retrieval + prompt building) measures at a
+negligible 0.58ms, but the real LLM call itself hasn't been measured live
+(no API access in the build environment; see
+`tier2_reasoner/README.md`'s "Known limitations"). Using the 3-5s/call
+estimate published for LLM-based SOC triage in the literature this
+project checked against (see [H1's literature
+verification](#open-set-escalation-experimental)), at this pipeline's
+real Tier 1 latency (9.67ms) and a 10% escalation budget:
+
+```
+amortized = 9.67 + 0.10 * 3000..5000  =  ~309..509 ms/flow
+```
+
+That's 30-50x Tier 1's own latency -- the honest current answer, not a
+target hit. Getting to a genuinely "real-time" amortized latency means
+either pushing the escalation budget well below 10%, or using a
+materially faster model for Tier 2, or both -- not something to claim
+solved until `tier2_reasoner`'s real LLM latency is actually measured and
+fed back into this formula.
+
 ## Serving
 
 ```
@@ -653,10 +708,24 @@ PYTHONPATH=src pytest
   But the evaluation feeds it ground-truth-known calibration traffic, which
   a live `ScoringService` doesn't have in real time. `TwoStageDetector`
   still only accepts a static `ConformalGate` as `escalation_gate`.
+- **`ScoringService` processes one flow per `score()` call, not batched.**
+  `evaluation.latency_report` measures real single-flow throughput at
+  ~103 flows/sec on CSE-CIC-IDS2018 -- 68x below the ~7,116 flows/sec
+  batched throughput the same models achieve at batch size 128 (see
+  [Latency and real-time feasibility](#latency-and-real-time-feasibility)).
+  103/sec is this pipeline's actual live ceiling today; getting closer to
+  the batched number requires adding a batching layer in front of
+  `TwoStageDetector.score`, which doesn't exist yet.
 
 ## Out of scope
 
 Ingestion (packet capture, flow extraction, the `network.flow.features`
 producer), the dashboard, and the API are not implemented here -- this
 module only consumes/publishes via the documented Kafka topic contracts
-above.
+above. The Tier 2 LLM/RAG escalation reasoner is a separate sibling
+service (`tier2_reasoner/`) for the same reason: it consumes this
+module's existing `network.ids.alerts` topic (filtering client-side for
+`escalated == true` -- see `tier2_reasoner/README.md` for why that's a
+deliberate simplification from a dedicated escalations topic) and
+publishes to its own `network.ids.explanations` topic. No code dependency
+either direction.

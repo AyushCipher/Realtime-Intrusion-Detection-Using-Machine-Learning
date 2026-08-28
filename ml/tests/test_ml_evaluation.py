@@ -14,6 +14,8 @@ from ids_ml.evaluation import (
     openset_vs_softmax_significance,
     per_category_report,
     run_openset_trial,
+    amortized_latency_ms,
+    latency_report,
     simulate_low_and_slow,
     static_vs_adaptive_conformal_drift_report,
     static_vs_adaptive_conformal_report,
@@ -249,3 +251,60 @@ def test_static_vs_adaptive_conformal_significance_handles_too_few_pairs():
     result = static_vs_adaptive_conformal_significance(tiny_report)
     assert result["n_pairs"] < 2
     assert np.isnan(result["p_value"])
+
+
+# --- Latency / throughput ---------------------------------------------
+
+
+def _fit_detector_for_latency():
+    df = load_and_map(FIXTURE_PATH)
+    train, _val, test = time_based_split(df, train_frac=0.7, val_frac=0.15)
+    X_train = train[CANONICAL_FEATURE_COLUMNS].to_numpy()
+    stage1 = AnomalyPreFilter(Stage1Config(n_estimators=50, contamination=0.25, random_state=0)).fit(X_train)
+    stage2 = AttackClassifier(Stage2Config(n_estimators=30, random_state=0)).fit(X_train, train["attack_category"].tolist())
+    detector = TwoStageDetector(stage1, stage2)
+    X_test = test[CANONICAL_FEATURE_COLUMNS].to_numpy()
+    return detector, X_test
+
+
+def test_latency_report_returns_positive_finite_numbers():
+    detector, X_test = _fit_detector_for_latency()
+    report = latency_report(detector, X_test, warmup=5, n_trials=20, batch_size=16)
+
+    for value in (
+        report.single_median_ms,
+        report.single_p95_ms,
+        report.single_p99_ms,
+        report.single_throughput_per_sec,
+        report.batch_median_ms,
+        report.batch_throughput_per_sec,
+    ):
+        assert value > 0
+        assert np.isfinite(value)
+    # p99 should be at or above the median (same distribution, higher percentile)
+    assert report.single_p99_ms >= report.single_median_ms
+    assert report.single_p95_ms >= report.single_median_ms
+
+
+def test_latency_report_batch_size_is_capped_by_available_rows():
+    detector, X_test = _fit_detector_for_latency()
+    report = latency_report(detector, X_test, warmup=2, n_trials=5, batch_size=10_000)
+    assert report.batch_size == len(X_test)
+
+
+def test_latency_report_rejects_empty_input():
+    detector, _X_test = _fit_detector_for_latency()
+    with pytest.raises(ValueError):
+        latency_report(detector, np.empty((0, len(CANONICAL_FEATURE_COLUMNS))))
+
+
+def test_amortized_latency_is_tier1_when_escalation_rate_is_zero():
+    assert amortized_latency_ms(tier1_median_ms=5.0, escalation_rate=0.0, tier2_latency_ms=500.0) == pytest.approx(5.0)
+
+
+def test_amortized_latency_adds_full_tier2_cost_when_escalation_rate_is_one():
+    assert amortized_latency_ms(tier1_median_ms=5.0, escalation_rate=1.0, tier2_latency_ms=500.0) == pytest.approx(505.0)
+
+
+def test_amortized_latency_scales_linearly_with_escalation_rate():
+    assert amortized_latency_ms(tier1_median_ms=2.0, escalation_rate=0.1, tier2_latency_ms=1000.0) == pytest.approx(102.0)
