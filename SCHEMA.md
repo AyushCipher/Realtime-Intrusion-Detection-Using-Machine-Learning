@@ -123,6 +123,37 @@ relying on the dashboard to surface open-set escalations -- see `ml/
 README.md`'s "Open-set escalation" section for what still needs wiring up
 end-to-end.
 
+## Topic: `network.ids.explanations`
+
+Published by `tier2_reasoner`, consumed by `dashboard-api` (not yet --
+see below). **Not part of the running docker-compose system** --
+`tier2_reasoner` is standalone (see the top-level README's "Repo layout"
+and `tier2_reasoner/README.md`'s known-limitations section). Documented
+here now so the contract is fixed before any consumer is built against
+it, same reasoning as documenting the alert schema before dashboard-api
+existed.
+
+| Field | Type | Notes |
+|---|---|---|
+| `explanation_id` | string | UUID, generated per explanation by `tier2_reasoner` |
+| `alert_id`, `flow_id` | string | Joins back to the originating `network.ids.alerts` event |
+| `generated_at` | number | Unix epoch seconds -- when `tier2_reasoner` finished reasoning |
+| `suspected_technique_id`, `suspected_technique_name` | string | From the curated MITRE ATT&CK subset in `tier2_reasoner/knowledge_base.py`; both `""` if nothing plausible was retrieved or the LLM response didn't parse |
+| `risk_explanation` | string | The LLM's free-text reasoning; falls back to the raw (unparseable) LLM response text if the expected JSON structure wasn't returned |
+| `recommended_action` | string | `""` on a parse failure, same as the technique fields |
+| `retrieved_technique_ids` | array | Every technique ID retrieval surfaced, not just the top one; `[]` when `rag_enabled` is `false` |
+| `rag_enabled` | boolean | `false` only when run with `--no-rag` (the H3 ablation switch) |
+| `llm_latency_ms` | number | Wall-clock time for the LLM call itself |
+| `model_version` | string | `"stub-v1"` (default; no API key needed) or the real LLM client's model name |
+| `schema_version` | integer | Currently `1` |
+
+**Only escalated alerts (`escalated == true`) ever produce an
+explanation.** `tier2_reasoner` consumes the existing `network.ids.alerts`
+topic (not a dedicated pre-filtered topic -- a deliberate simplification,
+see `tier2_reasoner/README.md`) and filters client-side; non-escalated
+alerts never reach the reasoning step at all, which is what keeps the LLM
+off the hot path.
+
 ## Timestamp semantics (three distinct clocks, all Unix epoch seconds float)
 
 Easy to conflate, so spelled out explicitly:

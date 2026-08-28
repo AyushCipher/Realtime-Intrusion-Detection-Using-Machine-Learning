@@ -1,20 +1,24 @@
 # Realtime Intrusion Detection Using Machine Learning
 
-A real-time network intrusion detection system built as three independently
-authored, independently testable modules, wired together here into one
-running system.
+A real-time network intrusion detection system built as independently
+authored, independently testable modules. The first three are wired
+together here into one running system; a fourth (Tier 2 reasoning) exists
+and is tested standalone but is **not yet wired into the running system
+below** -- see its own README's known-limitations section.
 
 | Module | Folder | What it does |
 |---|---|---|
 | Ingestion | [`ingestion/`](ingestion/README.md) | Live/pcap-replay packet capture -> sliding-window flow feature extraction -> publishes to Kafka |
-| ML detection | [`ml/`](ml/README.md) | Consumes flow features -> two-stage detector (Isolation Forest + XGBoost) -> SHAP explanations -> publishes alerts to Kafka |
+| ML detection | [`ml/`](ml/README.md) | Consumes flow features -> two-stage detector (Isolation Forest + XGBoost) + optional open-set escalation gate -> SHAP explanations -> publishes alerts to Kafka |
 | Dashboard/API | [`dashboard-api/`](dashboard-api/README.md) | Consumes alerts -> FastAPI REST/WebSocket API -> React triage dashboard |
+| Tier 2 reasoning (standalone) | [`tier2_reasoner/`](tier2_reasoner/README.md) | Consumes `ml`'s escalated alerts -> RAG over MITRE ATT&CK -> LLM explanation -> publishes to its own topic. Not yet in `docker-compose.yml`. |
 
 Each module folder has its own README with that module's design decisions
 and a "known limitations" section written from inside that module. This
-file is the integration layer on top: how the three actually run together,
-the true (verified, not assumed) schema they agree on, and what broke and
-got fixed only once they were wired up for real.
+file is the integration layer for the three that are actually wired
+together below: how they run together, the true (verified, not assumed)
+schema they agree on, and what broke and got fixed only once they were
+wired up for real.
 
 ## Architecture
 
@@ -136,11 +140,12 @@ broker together surfaced two real bugs that no module's own test suite
 
 ```
 ingestion/        packet capture, flow extraction, Kafka producer (+ its own README/tests)
-ml/                two-stage detector, SHAP, Kafka consumer+producer (+ its own README/tests)
+ml/                two-stage detector, SHAP, open-set escalation gate, Kafka consumer+producer (+ its own README/tests)
 dashboard-api/     FastAPI backend + React frontend (+ its own README/tests)
-integration/       test_e2e.py -- the full-stack check described above
-docker-compose.yml the one shared broker + all four services
-SCHEMA.md          reconciled, verified Kafka topic schemas
+tier2_reasoner/    RAG + LLM escalation reasoning (+ its own README/tests) -- standalone, not in docker-compose.yml yet
+integration/       test_e2e.py -- the full-stack check described above (covers the first three modules only)
+docker-compose.yml the shared broker + the first three services (tier2_reasoner is not included)
+SCHEMA.md          reconciled, verified Kafka topic schemas (network.ids.explanations documented, but tier2_reasoner isn't wired into the running system yet)
 ```
 
 Everything at the top level (`docker-compose.yml`, per-service
@@ -193,3 +198,14 @@ the usual intuition, and why that result doesn't generalize on its own.
 wiring end-to-end (which is what `integration/test_e2e.py` checks), not
 enough to say anything about detection quality or the dashboard's
 volume/severity views at any real scale.
+
+**Tier 2 reasoning (`tier2_reasoner/`) is real, tested, and standalone --
+not wired into this system.** It has its own passing test suite (49
+tests) and CLI, but: it's not in `docker-compose.yml`, `ml`'s
+Dockerfile/entrypoint don't build the `gate=`/`escalation_gate=` options
+needed to actually populate `escalated: true` alerts for the demo model,
+`dashboard-api` doesn't consume `network.ids.explanations`, and its LLM
+client has never been called against a real API (no credentials were
+available while building it -- see `tier2_reasoner/README.md`'s
+known-limitations section). `integration/test_e2e.py` does not exercise
+any of this.

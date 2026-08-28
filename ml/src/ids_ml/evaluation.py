@@ -11,6 +11,7 @@ dataset and what to expect to be different.
 
 from __future__ import annotations
 
+import time
 from dataclasses import asdict, dataclass
 from typing import Dict, List, Optional, Sequence
 
@@ -603,3 +604,94 @@ def static_vs_adaptive_conformal_significance(report_df: pd.DataFrame, segment: 
         "adaptive_error_std": float(adaptive_errs.std()),
         "note": note,
     }
+
+
+# --- Latency / throughput ---------------------------------------------
+#
+# Real-time feasibility evidence: every open-set/LLM-escalation paper this
+# project checked against (DQN-IDS most directly -- arXiv, NDSS SDIoTSec
+# 2026) reports per-flow inference latency as the first thing a reviewer
+# looks for, not an afterthought. Measured here the same way DQN-IDS
+# measured its own two-stage CNN+DQN pipeline: warm-up iterations
+# discarded, then median/p95/p99 over single-flow calls (how a live
+# Kafka consumer actually calls `TwoStageDetector.score`, one flow at a
+# time) plus a batched-throughput number.
+
+
+@dataclass
+class LatencyReport:
+    n_warmup: int
+    n_trials: int
+    single_median_ms: float
+    single_p95_ms: float
+    single_p99_ms: float
+    single_throughput_per_sec: float
+    batch_size: int
+    batch_median_ms: float  # per batched score() call, not per row
+    batch_throughput_per_sec: float  # rows/sec when batched
+
+
+def latency_report(detector, X: np.ndarray, warmup: int = 50, n_trials: int = 200, batch_size: int = 64) -> LatencyReport:
+    """Measures `pipeline.TwoStageDetector.score`'s inference latency on
+    real (already-fit) stage1/stage2 models, both single-flow (one row per
+    call -- how `scoring_service.ScoringService.process_event` actually
+    calls it) and batched. `warmup` calls are timed but discarded first --
+    XGBoost/sklearn's first few calls include cache/allocation overhead
+    that isn't representative of steady-state serving latency (the same
+    warm-up pattern DQN-IDS's own runtime table uses).
+    """
+    n = X.shape[0]
+    if n < 1:
+        raise ValueError("X must have at least one row")
+
+    for i in range(warmup):
+        detector.score(X[i % n : i % n + 1])
+
+    single_times_ms = np.empty(n_trials)
+    for i in range(n_trials):
+        idx = (warmup + i) % n
+        t0 = time.perf_counter()
+        detector.score(X[idx : idx + 1])
+        t1 = time.perf_counter()
+        single_times_ms[i] = (t1 - t0) * 1000.0
+
+    actual_batch_size = min(batch_size, n)
+    # Non-overlapping windows of actual_batch_size rows, up to 20 of them
+    # -- bounded by n // actual_batch_size so every window stays in range.
+    n_batches = max(1, min(20, n // actual_batch_size))
+    batch_times_ms = np.empty(n_batches)
+    for b in range(n_batches):
+        start = b * actual_batch_size
+        batch = X[start : start + actual_batch_size]
+        t0 = time.perf_counter()
+        detector.score(batch)
+        t1 = time.perf_counter()
+        batch_times_ms[b] = (t1 - t0) * 1000.0
+
+    batch_median = float(np.median(batch_times_ms))
+
+    return LatencyReport(
+        n_warmup=warmup,
+        n_trials=n_trials,
+        single_median_ms=float(np.median(single_times_ms)),
+        single_p95_ms=float(np.percentile(single_times_ms, 95)),
+        single_p99_ms=float(np.percentile(single_times_ms, 99)),
+        single_throughput_per_sec=float(1000.0 / np.median(single_times_ms)),
+        batch_size=actual_batch_size,
+        batch_median_ms=batch_median,
+        batch_throughput_per_sec=float(actual_batch_size * 1000.0 / batch_median) if batch_median else float("nan"),
+    )
+
+
+def amortized_latency_ms(tier1_median_ms: float, escalation_rate: float, tier2_latency_ms: float) -> float:
+    """Expected end-to-end per-flow latency: every flow pays Tier 1's
+    (stage1+stage2) cost; only the `escalation_rate` fraction additionally
+    pays Tier 2's cost. This -- not Tier 2's raw latency alone -- is the
+    number that determines real-time feasibility, which is the entire
+    point of routing only the escalated minority to a heavier downstream
+    tier instead of running it on every flow (see `tier2_reasoner`'s
+    README for the measured Tier 2 latency this gets combined with, and
+    `ml/README.md`'s real-data escalation rates for realistic
+    `escalation_rate` values instead of a guessed one).
+    """
+    return tier1_median_ms + escalation_rate * tier2_latency_ms
