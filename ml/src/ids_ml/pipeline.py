@@ -7,6 +7,15 @@ recall on attacks is bounded by stage 1's recall. `evaluation.py` separately
 runs stage 2 on *all* rows to characterize it as a standalone classifier;
 that comparison is what makes stage 1's miss rate visible instead of hidden
 inside a single blended number.
+
+Optionally, a `gate` (`softmax_gate.SoftmaxGate` or `openset_head.
+OpenMaxHead`) recalibrates stage 2's output on flagged rows into a
+three-way decision -- `known-benign` / `known-attack` / `escalated` --
+instead of the plain "flagged or not" binary, per the open-set upgrade
+(see `ml/README.md`'s open-set section). Without a `gate`, `score()`
+behaves exactly as before: every flagged row is `known-benign` or
+`known-attack` from stage 2's raw prediction, `unknown_mass` is always
+`0.0`, and nothing is ever escalated.
 """
 
 from __future__ import annotations
@@ -18,6 +27,7 @@ from typing import Any, Dict, List, Optional
 
 import numpy as np
 
+from .conformal_gate import ConformalGate
 from .stage1_iforest import AnomalyPreFilter
 from .stage2_xgboost import AttackClassifier
 
@@ -66,14 +76,43 @@ class ScoredFlow:
     stage2_predicted_class: str
     stage2_confidence: float
     stage2_class_probabilities: Dict[str, float]
+    # Open-set fields (see module docstring). Defaults match the pre-open-set
+    # behavior exactly when no `gate` is passed to TwoStageDetector.
+    decision: str = "known-benign"  # "known-benign" | "known-attack" | "escalated"
+    unknown_mass: float = 0.0
+    escalated: bool = False
+    escalation_trigger: str = ""  # "openset" | "softmax" | "" (no gate configured)
 
 
 class TwoStageDetector:
-    """The deployed stage1 -> stage2 cascade."""
+    """The deployed stage1 -> stage2 cascade.
 
-    def __init__(self, stage1: AnomalyPreFilter, stage2: AttackClassifier) -> None:
+    `gate` and `escalation_gate` are both optional and independent:
+    - No `gate`: original behavior, `decision` is `known-benign`/
+      `known-attack` from stage 2's raw prediction, nothing escalates.
+    - `gate` without `escalation_gate`: stage 2's flagged-row predictions
+      are recalibrated (`unknown_mass` is real) but nothing escalates,
+      since there's no calibrated threshold to escalate against yet --
+      useful for collecting `unknown_mass` scores to calibrate one
+      (`conformal_gate.calibrate_threshold`).
+    - Both: the full three-way router -- `escalated` when `unknown_mass`
+      exceeds `escalation_gate.threshold`, else `known-benign`/
+      `known-attack` from the gate's recalibrated prediction.
+    """
+
+    def __init__(
+        self,
+        stage1: AnomalyPreFilter,
+        stage2: AttackClassifier,
+        gate: Optional[Any] = None,
+        escalation_gate: Optional[ConformalGate] = None,
+        escalation_trigger_name: str = "",
+    ) -> None:
         self.stage1 = stage1
         self.stage2 = stage2
+        self.gate = gate
+        self.escalation_gate = escalation_gate
+        self.escalation_trigger_name = escalation_trigger_name
 
     def score(self, X: np.ndarray) -> List[ScoredFlow]:
         n = X.shape[0]
@@ -84,18 +123,44 @@ class TwoStageDetector:
         flagged_idx = np.where(stage1_flags)[0]
 
         if len(flagged_idx) > 0:
-            proba = self.stage2.predict_proba(X[flagged_idx])
+            X_flagged = X[flagged_idx]
+            proba = self.stage2.predict_proba(X_flagged)
             classes = self.stage2.classes_
             best = proba.argmax(axis=1)
+
+            gate_results = self.gate.recalibrate_batch(X_flagged) if self.gate is not None else None
+
             for pos, row in enumerate(flagged_idx):
                 class_probs = {classes[c]: float(proba[pos, c]) for c in range(len(classes))}
+                predicted_class = str(classes[best[pos]])
+                confidence = float(proba[pos, best[pos]])
+                unknown_mass = 0.0
+                escalated = False
+                trigger = ""
+
+                if gate_results is not None:
+                    gr = gate_results[pos]
+                    predicted_class = gr.predicted_class
+                    confidence = gr.known_class_probabilities.get(predicted_class, confidence)
+                    class_probs = gr.known_class_probabilities
+                    unknown_mass = gr.unknown_mass
+                    trigger = self.escalation_trigger_name
+                    if self.escalation_gate is not None and self.escalation_gate.should_escalate(unknown_mass):
+                        escalated = True
+
+                decision = "escalated" if escalated else ("known-benign" if predicted_class == "BENIGN" else "known-attack")
+
                 results[row] = ScoredFlow(
                     stage1_anomaly_score=float(stage1_scores[row]),
                     stage1_flagged=True,
                     stage2_ran=True,
-                    stage2_predicted_class=str(classes[best[pos]]),
-                    stage2_confidence=float(proba[pos, best[pos]]),
+                    stage2_predicted_class=predicted_class,
+                    stage2_confidence=confidence,
                     stage2_class_probabilities=class_probs,
+                    decision=decision,
+                    unknown_mass=unknown_mass,
+                    escalated=escalated,
+                    escalation_trigger=trigger,
                 )
 
         for row in range(n):
@@ -107,6 +172,7 @@ class TwoStageDetector:
                     stage2_predicted_class="BENIGN",
                     stage2_confidence=1.0,
                     stage2_class_probabilities={},
+                    decision="known-benign",
                 )
 
         return results  # type: ignore[return-value]
@@ -140,6 +206,9 @@ def build_alert(
         "stage2_class_probabilities": scored.stage2_class_probabilities,
         "severity": severity_for(scored.stage2_predicted_class, scored.stage2_confidence),
         "explanation": explanation or [],
+        "unknown_mass": scored.unknown_mass,
+        "escalated": scored.escalated,
+        "escalation_trigger": scored.escalation_trigger,
         "model_version": MODEL_VERSION,
         "schema_version": ALERT_SCHEMA_VERSION,
     }

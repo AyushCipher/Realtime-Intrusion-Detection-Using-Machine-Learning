@@ -66,6 +66,11 @@ def test_build_alert_produces_a_schema_valid_event():
     alert = build_alert(event, results[0])
     validate_alert_event(alert)  # raises on any schema mismatch
     assert alert["flow_id"] == "flow-123"
+    # Open-set fields default to "no gate configured" values when the
+    # detector wasn't given a gate (see pipeline.py's module docstring).
+    assert alert["unknown_mass"] == 0.0
+    assert alert["escalated"] is False
+    assert alert["escalation_trigger"] == ""
 
 
 def test_event_to_feature_vector_matches_canonical_column_order():

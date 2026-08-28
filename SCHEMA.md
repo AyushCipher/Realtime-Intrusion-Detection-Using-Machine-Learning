@@ -102,6 +102,9 @@ Published by `ml`, consumed by `dashboard-api`.
 | `stage2_class_probabilities` | object | Full per-class probability map; `{}` when stage 2 didn't run |
 | `severity` | string | One of `info`/`low`/`medium`/`high`/`critical` |
 | `explanation` | array | Top-k `{feature, value, shap_value}` TreeSHAP contributions; `[]` if stage 2 didn't run |
+| `unknown_mass` | number | Open-set escalation signal in `[0, 1]`; `0.0` unless `ml`'s detector was built with a `gate` (see `ml/README.md`'s open-set section) |
+| `escalated` | boolean | Whether `unknown_mass` exceeded a calibrated threshold; always `false` without a `gate` |
+| `escalation_trigger` | string | `"openset"` \| `"softmax"` \| `""` (no gate configured) -- which gate produced `unknown_mass` |
 | `model_version` | string | e.g. `two-stage-v1` |
 | `schema_version` | integer | Currently `1` |
 
@@ -109,6 +112,16 @@ By default `ml` only publishes alerts where `stage2_predicted_class !=
 "BENIGN"`. Pass `--alert-on-stage1-flag-only` to `ml`'s `serve.py` to also
 publish stage-1-flagged-but-benign events (useful for the dashboard's
 stage-1 false-positive-rate stat -- see `dashboard-api/README.md`).
+
+**`dashboard-api`'s own schema copy does not yet declare `unknown_mass`/
+`escalated`/`escalation_trigger`** (its `validate_alert_event` only checks
+for its own required fields, so these three pass through unvalidated and
+unused rather than being rejected -- verified by reading `dashboard-api/
+src/ids_dashboard/schema.py` and `store.py` directly, not assumed). Add
+them there (and to the dashboard's alert model/API/frontend) before
+relying on the dashboard to surface open-set escalations -- see `ml/
+README.md`'s "Open-set escalation" section for what still needs wiring up
+end-to-end.
 
 ## Timestamp semantics (three distinct clocks, all Unix epoch seconds float)
 
