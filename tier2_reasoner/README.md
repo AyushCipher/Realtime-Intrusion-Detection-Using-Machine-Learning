@@ -349,13 +349,16 @@ available in CI).
   producer** -- see `explanation_producer.py`'s module docstring for why
   that's a documented scope reduction (the LLM call itself is the
   bottleneck by 2-3 orders of magnitude, not the Kafka publish).
-- **No Dockerfile/docker-compose wiring yet.** This module runs
-  standalone (`python -m ids_tier2.serve`) but isn't yet integrated into
-  the top-level `docker-compose.yml` the way `ingestion`/`ml`/
-  `dashboard-api` are -- see the top-level README's known-limitations
-  section.
-- **`dashboard-api` doesn't consume `network.ids.explanations` yet.**
-  This module publishes; nothing downstream reads it.
+- **Now wired into `docker-compose.yml`** (falls back to `StubLLMClient`
+  automatically with no API key set, so `docker compose up` works out of
+  the box; a real key via a local, gitignored `.env` enables real
+  reasoning) **and `dashboard-api` now consumes and displays
+  `network.ids.explanations`** (REST endpoint + live WebSocket + UI
+  panel) -- but this was verified via `docker compose config` (parses and
+  resolves correctly) and each module's own test suite, not via an actual
+  `docker compose up --build` end-to-end run. The Docker daemon was not
+  running in the environment this was built in. See the top-level
+  README's known-limitations section.
 
 ## Out of scope
 

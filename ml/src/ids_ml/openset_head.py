@@ -42,6 +42,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Dict, List, Optional, Sequence
 
+import joblib
 import numpy as np
 import xgboost as xgb
 from scipy.stats import weibull_min
@@ -127,6 +128,26 @@ class OpenMaxHead:
     def _check_fitted(self) -> None:
         if not self._fitted:
             raise RuntimeError("OpenMaxHead must be fit() before use")
+
+    def save(self, path) -> None:
+        """Saves only this head's own fitted state (MAVs, Weibull tails,
+        config) -- not the underlying `AttackClassifier`, which is already
+        saved/loaded separately (`stage2_xgboost.AttackClassifier.save`/
+        `.load`). `load()` requires the same classifier instance back, the
+        same way `explainability.ShapExplainer` is reconstructed fresh
+        around an already-loaded classifier rather than re-saving it.
+        """
+        self._check_fitted()
+        joblib.dump({"mavs": self._mavs, "tails": self._tails, "config": self.config}, path)
+
+    @classmethod
+    def load(cls, path, classifier: AttackClassifier) -> "OpenMaxHead":
+        payload = joblib.load(path)
+        instance = cls(classifier, payload["config"])
+        instance._mavs = payload["mavs"]
+        instance._tails = payload["tails"]
+        instance._fitted = True
+        return instance
 
     def recalibrate_batch(self, X: np.ndarray) -> List[GateResult]:
         self._check_fitted()

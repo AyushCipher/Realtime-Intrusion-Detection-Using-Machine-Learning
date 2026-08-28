@@ -1,36 +1,44 @@
 # Alert Dashboard & API Layer (`ids_dashboard`)
 
-FastAPI backend and React frontend for triaging alerts from the ML module.
-Consumes `network.ids.alerts` (schema in `schema.py`, duplicated from the ML
-module's own copy so this module has no code dependency on it), stores
-alerts for historical query/filter, pushes live alerts over a WebSocket,
-and serves REST endpoints for the dashboard. This package does not
-implement ingestion or any detection model -- see
+FastAPI backend and React frontend for triaging alerts from the ML module,
+including open-set escalation status and Tier 2 (LLM/RAG) explanations.
+Consumes `network.ids.alerts` (schema in `schema.py`, duplicated from
+`ids_ml`'s own copy) and `network.ids.explanations` (duplicated from
+`tier2_reasoner`'s own copy) -- two independent consumers, since the two
+topics come from two different producers with no delivery-order guarantee
+between them (see `explanation_consumer.py`'s module docstring). Stores
+both for historical query/filter, pushes both live over one WebSocket
+connection, and serves REST endpoints for the dashboard. This package
+does not implement ingestion or any detection/reasoning model -- see
 [Out of scope](#out-of-scope).
 
 ## Architecture
 
 ```
-Kafka: network.ids.alerts     IngestService              FastAPI
-(from ids_ml)            -->  (background thread    -->  REST  /api/alerts, /api/alerts/summary,
-                                consuming Kafka,           /api/alerts/{id}/triage, /api/ws-token
-                                writing to SQLite,    -->  WebSocket  /ws/alerts (token-gated)
-                                broadcasting to
-                                connected clients)
-                                     |
-                                     v
-                               SQLite (alerts.db)
-                               history + triage state
+Kafka: network.ids.alerts        IngestService                  FastAPI
+(from ids_ml)                -->  (background thread       -->  REST  /api/alerts, /api/alerts/summary,
+                                    consuming Kafka,               /api/alerts/{id}/triage,
+                                    writing to SQLite,              /api/alerts/{id}/explanation,
+                                    broadcasting)                   /api/ws-token
+                                          |                   -->  WebSocket  /ws/alerts (token-gated,
+Kafka: network.ids.explanations  ExplanationIngestService          carries both alert and explanation
+(from tier2_reasoner)        -->  (independent background          broadcasts -- see routes_ws.py)
+                                    thread, same store +
+                                    broadcaster)
+                                          |
+                                          v
+                                   SQLite (alerts.db)
+                                   alerts + explanations + triage state
 ```
 
-- `schema.py` -- the input alert contract (duplicated from `ids_ml.schema`).
-- `store.py` -- SQLite-backed alert history, filtering, and analyst triage state.
-- `alert_consumer.py` -- Kafka alert source (real + in-memory stub), mirrors `ids_ml.flow_consumer`.
-- `broadcaster.py` -- in-process WebSocket fan-out.
-- `ingest_service.py` -- background thread tying consumer -> store -> broadcaster.
+- `schema.py` -- the alert *and* explanation topic contracts (both duplicated from their producer module's own copy).
+- `store.py` -- SQLite-backed alert + explanation history, filtering (including by `escalated`), and analyst triage state.
+- `alert_consumer.py` / `explanation_consumer.py` -- the two independent Kafka sources (real + in-memory stub each), mirroring `ids_ml.flow_consumer`'s shape.
+- `broadcaster.py` -- in-process WebSocket fan-out, shared by both ingest services (explanation broadcasts carry a `__type: "explanation"` marker; alert broadcasts are unmarked, unchanged from before -- see `explanation_ingest_service.py`).
+- `ingest_service.py` / `explanation_ingest_service.py` -- the two background threads tying each consumer -> store -> broadcaster.
 - `auth.py` -- HTTP Basic auth + short-lived WebSocket tokens.
 - `routes_alerts.py` / `routes_ws.py` / `app.py` -- the FastAPI surface.
-- `frontend/` (top-level, sibling to `src/`) -- the React dashboard.
+- `frontend/` (top-level, sibling to `src/`) -- the React dashboard: live feed and triage view show an ESCALATED badge; the alert detail panel shows `unknown_mass`/`escalation_trigger` and, for escalated alerts, fetches (and live-updates) the Tier 2 explanation.
 
 ## Running
 
@@ -53,8 +61,9 @@ required -- the process refuses to start without them):
 |---|---|---|
 | `IDS_DASHBOARD_USERNAME` / `IDS_DASHBOARD_PASSWORD` | *(required)* | The single shared Basic-auth credential pair |
 | `IDS_DASHBOARD_BOOTSTRAP_SERVERS` | `localhost:9092` | Kafka bootstrap servers, comma-separated |
-| `IDS_DASHBOARD_ALERT_TOPIC` | `network.ids.alerts` | Topic to consume |
-| `IDS_DASHBOARD_USE_STUB` | `false` | Run against an empty in-memory source instead of Kafka |
+| `IDS_DASHBOARD_ALERT_TOPIC` | `network.ids.alerts` | Alert topic to consume |
+| `IDS_DASHBOARD_EXPLANATION_TOPIC` | `network.ids.explanations` | Tier 2 explanation topic to consume |
+| `IDS_DASHBOARD_USE_STUB` | `false` | Run against empty in-memory sources (both alerts and explanations) instead of Kafka |
 | `IDS_DASHBOARD_DB_PATH` | `alerts.db` | SQLite file path (`:memory:` for ephemeral) |
 | `IDS_DASHBOARD_WS_TOKEN_TTL` | `300` | WebSocket token lifetime, seconds |
 | `IDS_DASHBOARD_CORS_ORIGINS` | `*` | Comma-separated allowed origins |
@@ -64,24 +73,35 @@ required -- the process refuses to start without them):
 
 All routes below except `/healthz` require HTTP Basic auth.
 
-- `GET /api/alerts?severity=&attack_type=&start_time=&end_time=&triage_status=&limit=&offset=`
-  -- filtered, paginated alert history, newest first.
-- `GET /api/alerts/{alert_id}` -- one alert, 404 if unknown.
+- `GET /api/alerts?severity=&attack_type=&start_time=&end_time=&triage_status=&escalated=&limit=&offset=`
+  -- filtered, paginated alert history, newest first. `escalated=true`/`false`
+  filters to alerts the open-set gate did/didn't escalate.
+- `GET /api/alerts/{alert_id}` -- one alert (including `unknown_mass`/`escalated`/`escalation_trigger`), 404 if unknown.
+- `GET /api/alerts/{alert_id}/explanation` -- Tier 2's explanation for this alert.
+  404 both when the alert itself doesn't exist and when it exists but Tier 2
+  hasn't produced an explanation yet (or never will -- not every alert is
+  escalated) -- callers already know an alert's `escalated` flag from the
+  alert itself and can use that to distinguish the two 404 cases if needed.
 - `PATCH /api/alerts/{alert_id}/triage` -- body `{"status": "...", "note": "..."}`,
   status one of `new`/`acknowledged`/`confirmed`/`false_positive`.
 - `GET /api/alerts/summary?start_time=&end_time=` -- volume by severity/attack
   type/day, plus both false-positive-rate signals (see `store.AlertStore.summary`'s
   docstring for what each one means and requires).
 - `POST /api/ws-token` -- issues a short-lived token for the WebSocket endpoint.
-- `GET /healthz` -- liveness probe; intentionally unauthenticated.
+- `GET /healthz` -- liveness probe; intentionally unauthenticated. Reports
+  `alerts_processed` and `explanations_processed` separately.
 
 ## WebSocket
 
-`GET /ws/alerts?token=...` pushes each newly-stored alert as a JSON frame to
-every connected client. Browsers cannot attach an `Authorization` header to
-a WebSocket handshake, so auth here is a short-lived opaque token fetched
-via the Basic-auth-protected `POST /api/ws-token` first -- not the Basic
-credentials themselves.
+`GET /ws/alerts?token=...` pushes both alert and explanation events as JSON
+frames to every connected client, over one connection -- alert frames are
+the original, unmarked shape (a raw alert object); explanation frames carry
+a `__type: "explanation"` field so the client can tell the two apart
+without breaking the existing alert frame format (see
+`explanation_ingest_service.py` and the frontend's `api.ts::connectAlertStream`).
+Browsers cannot attach an `Authorization` header to a WebSocket handshake,
+so auth here is a short-lived opaque token fetched via the Basic-auth-protected
+`POST /api/ws-token` first -- not the Basic credentials themselves.
 
 ## Testing
 
@@ -90,9 +110,13 @@ pip install -r requirements-dashboard.txt
 PYTHONPATH=src pytest
 ```
 
-Backend tests use `fastapi.testclient.TestClient` with an injected stub
-alert source and an in-memory SQLite database -- no live Kafka broker
-needed, matching the pattern used throughout this project.
+55 tests, backend only. Uses `fastapi.testclient.TestClient` with injected
+stub alert *and* explanation sources and an in-memory SQLite database --
+no live Kafka broker needed, matching the pattern used throughout this
+project. The frontend has no automated test suite; `npm run build` (`tsc
+-b && vite build`) passing is the only verification the new
+escalation/explanation UI has -- see [Known
+limitations](#known-limitations).
 
 ## Known limitations
 
@@ -134,9 +158,31 @@ needed, matching the pattern used throughout this project.
   intentional, to avoid persisting a shared Basic-auth password in browser
   storage, but worth knowing if a smoother reload experience is wanted
   later (that would need a proper session/token mechanism, not Basic auth).
+- **The new escalation/explanation UI has not been checked in a real
+  browser against a live backend.** `npm run build` (TypeScript + Vite)
+  passes cleanly, and the 55 backend tests cover the REST/WebSocket
+  contract those components call, but no one has actually clicked through
+  the live feed, opened an escalated alert, and watched a Tier 2
+  explanation arrive -- the Docker daemon was not running in the
+  environment this was built in, so `docker compose up` (needed for a
+  real end-to-end browser check against live Kafka/ml/tier2_reasoner
+  services) was not possible. Do this yourself before trusting the UI
+  behaves as described.
+- **`ExplanationIngestService` assumes Kafka delivery order between
+  `network.ids.alerts` and `network.ids.explanations` is not guaranteed**
+  (see `store.insert_explanation`'s docstring) and is written to tolerate
+  an explanation arriving before its alert -- exercised in
+  `test_dash_store.py::test_insert_explanation_does_not_require_the_alert_to_exist_yet`,
+  but only at the store layer, not as a live-timing race condition.
+- **Tier 2 explanations can take 5-40+ seconds to arrive** (see
+  `ml/README.md`'s Latency section) -- the UI's "pending" state for an
+  escalated alert with no explanation yet is the normal, expected case,
+  not an error state, but it does mean an analyst opening an alert right
+  after it's escalated will usually see "pending" first.
 
 ## Out of scope
 
-Ingestion and the ML detection models are not implemented here -- this
-module only consumes the alerts topic and serves it via the REST/WebSocket
-API and dashboard described above.
+Ingestion, the ML detection/open-set gate, and Tier 2's reasoning itself
+are not implemented here -- this module only consumes the alerts and
+explanations topics and serves them via the REST/WebSocket API and
+dashboard described above.

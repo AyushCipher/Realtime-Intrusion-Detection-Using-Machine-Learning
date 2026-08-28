@@ -201,7 +201,7 @@ input {
 
 .alert-row {
   display: grid;
-  grid-template-columns: 90px 1fr 2fr 60px 90px 110px;
+  grid-template-columns: 90px 1fr 2fr 60px 90px 50px 110px;
   align-items: center;
   gap: 12px;
   width: 100%;
@@ -246,6 +246,21 @@ input {
 .triage-false_positive { color: #69db7c; border-color: #69db7c; }
 .triage-acknowledged { color: #4dabf7; border-color: #4dabf7; }
 
+.alert-row-escalated {
+  justify-self: center;
+}
+
+.escalated-badge {
+  display: inline-block;
+  padding: 2px 7px;
+  border-radius: 999px;
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  color: #1a1a1a;
+  background: #ffd43b;
+}
+
 /* --- Live feed --- */
 
 .live-feed-header {
@@ -278,6 +293,15 @@ input {
 .triage-toolbar h2 {
   margin: 0;
   margin-right: 10px;
+}
+
+.escalated-filter-label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.85rem;
+  color: var(--text-dim);
+  cursor: pointer;
 }
 
 .triage-group {
@@ -377,6 +401,18 @@ input {
 
 .explain-fields dd {
   margin: 0;
+}
+
+.tier2-explanation {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 12px 14px;
+  margin-bottom: 12px;
+}
+
+.tier2-explanation .explain-fields {
+  margin-bottom: 0;
 }
 
 .explain-panel h3 {

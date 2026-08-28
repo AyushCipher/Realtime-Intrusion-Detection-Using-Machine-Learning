@@ -30,12 +30,48 @@ export interface Alert {
   stage2_class_probabilities: Record<string, number>;
   severity: Severity;
   explanation: FeatureContribution[];
+  // Open-set escalation fields -- see ml/README.md's "Open-set escalation"
+  // section. unknown_mass is 0.0 and escalation_trigger is "" unless the
+  // detector was built with a gate.
+  unknown_mass: number;
+  escalated: boolean;
+  escalation_trigger: "" | "openset" | "softmax";
   model_version: string;
   schema_version: number;
   received_at: number;
   triage_status: TriageStatus;
   triage_note: string | null;
   triage_updated_at: number | null;
+}
+
+// Mirrors tier2_reasoner/src/ids_tier2/schema.py's EXPLANATION_EVENT_FIELDS.
+// Only ever present for alerts where escalated is true, and only once
+// tier2_reasoner has actually processed it -- Tier 2's real measured
+// latency is 5-40+ seconds per alert (see ml/README.md's Latency section),
+// so "escalated but no explanation yet" is an expected, normal state.
+export interface Tier2Explanation {
+  explanation_id: string;
+  alert_id: string;
+  flow_id: string;
+  generated_at: number;
+  suspected_technique_id: string;
+  suspected_technique_name: string;
+  risk_explanation: string;
+  recommended_action: string;
+  retrieved_technique_ids: string[];
+  rag_enabled: boolean;
+  llm_latency_ms: number;
+  model_version: string;
+  schema_version: number;
+}
+
+// The live WebSocket carries two message shapes down one connection --
+// see api.ts's connectAlertStream. Alert broadcasts are unmarked (the
+// original, unchanged shape); explanation broadcasts carry this marker so
+// the client can tell them apart without a breaking change to the alert
+// message format.
+export interface Tier2ExplanationBroadcast extends Tier2Explanation {
+  __type: "explanation";
 }
 
 export interface AlertListResponse {

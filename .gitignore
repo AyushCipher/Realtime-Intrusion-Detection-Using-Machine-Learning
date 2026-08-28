@@ -13,6 +13,13 @@ node_modules/
 *.db
 models/
 
+# Local docker-compose secrets (e.g. GEMINI_API_KEY/ANTHROPIC_API_KEY for
+# tier2-reasoner) -- see docker-compose.yml's tier2-reasoner service and
+# tier2_reasoner/README.md. Never commit real keys.
+.env
+.env.*
+!.env.example
+
 # Leftover from the pre-integration repo layout (frontend/ moved to
 # dashboard-api/frontend/); left here only because it was locked by another
 # process (a file watcher/IDE) at restructuring time and could not be

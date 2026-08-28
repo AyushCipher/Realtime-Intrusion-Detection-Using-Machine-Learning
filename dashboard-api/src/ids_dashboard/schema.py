@@ -33,6 +33,38 @@ ALERT_EVENT_FIELDS: Dict[str, str] = {
     "stage2_class_probabilities": "object",
     "severity": "string",
     "explanation": "array",
+    # Open-set fields (see ids_ml.pipeline's module docstring). Added here
+    # once this module actually started storing/serving them -- previously
+    # these passed through unvalidated since they weren't declared
+    # required (see SCHEMA.md's reconciliation note on this).
+    "unknown_mass": "number",
+    "escalated": "boolean",
+    "escalation_trigger": "string",
+    "model_version": "string",
+    "schema_version": "integer",
+}
+
+# --- Output-side contract this module also depends on: tier2_reasoner's
+# explanations, joined onto alerts by alert_id. Duplicated from
+# tier2_reasoner's own schema.py, same "each module keeps its own copy"
+# boundary as the alert contract above -- no code dependency on
+# tier2_reasoner either. -------------------------------------------------
+
+EXPLANATION_TOPIC = "network.ids.explanations"
+EXPLANATION_SCHEMA_VERSION = 1
+
+EXPLANATION_EVENT_FIELDS: Dict[str, str] = {
+    "explanation_id": "string",
+    "alert_id": "string",
+    "flow_id": "string",
+    "generated_at": "number",
+    "suspected_technique_id": "string",
+    "suspected_technique_name": "string",
+    "risk_explanation": "string",
+    "recommended_action": "string",
+    "retrieved_technique_ids": "array",
+    "rag_enabled": "boolean",
+    "llm_latency_ms": "number",
     "model_version": "string",
     "schema_version": "integer",
 }
@@ -47,18 +79,26 @@ _TYPE_CHECKS = {
 }
 
 
-def validate_alert_event(event: Dict[str, Any]) -> None:
-    missing = [name for name in ALERT_EVENT_FIELDS if name not in event]
+def _validate_event(event: Dict[str, Any], fields: Dict[str, str]) -> None:
+    missing = [name for name in fields if name not in event]
     if missing:
-        raise ValueError(f"alert event missing required fields: {missing}")
+        raise ValueError(f"event missing required fields: {missing}")
     wrong_type = []
-    for name, expected_type in ALERT_EVENT_FIELDS.items():
+    for name, expected_type in fields.items():
         if not _TYPE_CHECKS[expected_type](event[name]):
             wrong_type.append((name, expected_type, type(event[name]).__name__))
     if wrong_type:
-        raise ValueError(f"alert event fields have unexpected types: {wrong_type}")
+        raise ValueError(f"event fields have unexpected types: {wrong_type}")
+
+
+def validate_alert_event(event: Dict[str, Any]) -> None:
+    _validate_event(event, ALERT_EVENT_FIELDS)
     if event["severity"] not in SEVERITY_LEVELS:
         raise ValueError(f"unknown severity: {event['severity']!r}")
+
+
+def validate_explanation_event(event: Dict[str, Any]) -> None:
+    _validate_event(event, EXPLANATION_EVENT_FIELDS)
 
 
 def event_from_json(payload: str) -> Dict[str, Any]:

@@ -14,6 +14,7 @@ export default function TriageView({ creds, onSelect }: { creds: Credentials; on
   const [alerts, setAlerts] = useState<Alert[]>([]);
   const [severityFilter, setSeverityFilter] = useState<string>("");
   const [triageFilter, setTriageFilter] = useState<string>("");
+  const [escalatedOnly, setEscalatedOnly] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -24,6 +25,7 @@ export default function TriageView({ creds, onSelect }: { creds: Credentials; on
       const resp = await listAlerts(creds, {
         severity: severityFilter || undefined,
         triage_status: triageFilter || undefined,
+        escalated: escalatedOnly ? true : undefined,
         limit: 200,
       });
       setAlerts(resp.alerts);
@@ -32,7 +34,7 @@ export default function TriageView({ creds, onSelect }: { creds: Credentials; on
     } finally {
       setLoading(false);
     }
-  }, [creds, severityFilter, triageFilter]);
+  }, [creds, severityFilter, triageFilter, escalatedOnly]);
 
   useEffect(() => {
     refresh();
@@ -67,6 +69,10 @@ export default function TriageView({ creds, onSelect }: { creds: Credentials; on
           <option value="confirmed">Confirmed</option>
           <option value="false_positive">False positive</option>
         </select>
+        <label className="escalated-filter-label">
+          <input type="checkbox" checked={escalatedOnly} onChange={(e) => setEscalatedOnly(e.target.checked)} />
+          Escalated only
+        </label>
         <button onClick={refresh} disabled={loading}>
           {loading ? "Refreshing..." : "Refresh"}
         </button>

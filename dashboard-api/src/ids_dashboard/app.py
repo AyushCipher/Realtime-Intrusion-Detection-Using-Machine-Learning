@@ -14,6 +14,8 @@ from .alert_consumer import AlertEventSource, KafkaAlertEventSource, StubAlertEv
 from .auth import AuthSettings, TokenStore, make_basic_auth_dependency
 from .broadcaster import AlertBroadcaster
 from .config import Settings
+from .explanation_consumer import ExplanationEventSource, KafkaExplanationEventSource, StubExplanationEventSource
+from .explanation_ingest_service import ExplanationIngestService
 from .ingest_service import IngestService
 from .routes_alerts import build_router as build_alerts_router
 from .routes_ws import build_router as build_ws_router
@@ -27,9 +29,11 @@ def create_app(
     auth_settings: Optional[AuthSettings] = None,
     source: Optional[AlertEventSource] = None,
     store: Optional[AlertStore] = None,
+    explanation_source: Optional[ExplanationEventSource] = None,
 ) -> FastAPI:
-    """Builds the app. `source`/`store` are injectable so tests (and
-    `--use-stub` local runs) don't need a real Kafka broker or DB file."""
+    """Builds the app. `source`/`store`/`explanation_source` are injectable
+    so tests (and `--use-stub` local runs) don't need a real Kafka broker
+    or DB file."""
     settings = settings or Settings.from_env()
     auth_settings = auth_settings or AuthSettings.from_env()
 
@@ -43,20 +47,29 @@ def create_app(
         else:
             source = KafkaAlertEventSource(settings.bootstrap_servers, topic=settings.alert_topic)
 
+    if explanation_source is None:
+        if settings.use_stub_source:
+            explanation_source = StubExplanationEventSource([])
+        else:
+            explanation_source = KafkaExplanationEventSource(settings.bootstrap_servers, topic=settings.explanation_topic)
+
     ingest_service = IngestService(source, store, broadcaster)
+    explanation_ingest_service = ExplanationIngestService(explanation_source, store, broadcaster)
 
     @asynccontextmanager
     async def lifespan(_: FastAPI):
         loop = asyncio.get_running_loop()
         ingest_service.start(loop)
+        explanation_ingest_service.start(loop)
         logger.info(
-            "Dashboard API started; ingesting from %s",
-            "stub source" if settings.use_stub_source else settings.bootstrap_servers,
+            "Dashboard API started; ingesting alerts+explanations from %s",
+            "stub sources" if settings.use_stub_source else settings.bootstrap_servers,
         )
         try:
             yield
         finally:
             ingest_service.stop()
+            explanation_ingest_service.stop()
             store.close()
 
     app = FastAPI(title="IDS Alert Dashboard API", version="0.1.0", lifespan=lifespan)
@@ -72,6 +85,7 @@ def create_app(
     app.state.broadcaster = broadcaster
     app.state.token_store = token_store
     app.state.ingest_service = ingest_service
+    app.state.explanation_ingest_service = explanation_ingest_service
 
     get_auth_user = make_basic_auth_dependency(auth_settings)
     app.include_router(build_alerts_router(get_auth_user))
@@ -82,6 +96,7 @@ def create_app(
         return {
             "status": "ok",
             "alerts_processed": ingest_service.processed,
+            "explanations_processed": explanation_ingest_service.processed,
             "ws_clients": broadcaster.client_count,
         }
 

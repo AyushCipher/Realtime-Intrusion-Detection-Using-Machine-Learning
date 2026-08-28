@@ -6,16 +6,26 @@ the pattern used throughout this project for testing Kafka-facing modules.
 import queue as queue_module
 import time
 
+import pytest
 from fastapi.testclient import TestClient
 
 from ids_dashboard.alert_consumer import AlertEventSource, StubAlertEventSource
 from ids_dashboard.app import create_app
 from ids_dashboard.auth import AuthSettings
 from ids_dashboard.config import Settings
+from ids_dashboard.explanation_consumer import ExplanationEventSource, StubExplanationEventSource
 from ids_dashboard.store import AlertStore
 
 
-def _valid_alert(alert_id="a1", severity="high", predicted_class="DoS/DDoS", scored_at=1_700_000_000.0):
+def _valid_alert(
+    alert_id="a1",
+    severity="high",
+    predicted_class="DoS/DDoS",
+    scored_at=1_700_000_000.0,
+    escalated=False,
+    escalation_trigger="",
+    unknown_mass=0.0,
+):
     return {
         "alert_id": alert_id,
         "flow_id": f"flow-{alert_id}",
@@ -33,7 +43,28 @@ def _valid_alert(alert_id="a1", severity="high", predicted_class="DoS/DDoS", sco
         "stage2_class_probabilities": {predicted_class: 0.9},
         "severity": severity,
         "explanation": [{"feature": "flow_duration", "value": 1.0, "shap_value": 0.4}],
+        "unknown_mass": unknown_mass,
+        "escalated": escalated,
+        "escalation_trigger": escalation_trigger,
         "model_version": "two-stage-v1",
+        "schema_version": 1,
+    }
+
+
+def _valid_explanation(explanation_id="e1", alert_id="a1"):
+    return {
+        "explanation_id": explanation_id,
+        "alert_id": alert_id,
+        "flow_id": f"flow-{alert_id}",
+        "generated_at": 1_700_000_010.0,
+        "suspected_technique_id": "T1110",
+        "suspected_technique_name": "Brute Force",
+        "risk_explanation": "Traffic pattern matches brute-force indicators.",
+        "recommended_action": "Block the source IP.",
+        "retrieved_technique_ids": ["T1110"],
+        "rag_enabled": True,
+        "llm_latency_ms": 5750.0,
+        "model_version": "gemini-3.6-flash",
         "schema_version": 1,
     }
 
@@ -41,13 +72,14 @@ def _valid_alert(alert_id="a1", severity="high", predicted_class="DoS/DDoS", sco
 AUTH = ("tester", "secret123")
 
 
-def _app_with_alerts(alerts):
+def _app_with_alerts(alerts, explanations=()):
     store = AlertStore(":memory:")
     app = create_app(
         settings=Settings(use_stub_source=True, db_path=":memory:"),
         auth_settings=AuthSettings(username=AUTH[0], password=AUTH[1]),
         source=StubAlertEventSource(alerts),
         store=store,
+        explanation_source=StubExplanationEventSource(explanations),
     )
     return app, store
 
@@ -105,6 +137,59 @@ def test_list_alerts_filters_by_severity():
         resp = client.get("/api/alerts", params={"severity": "high"}, auth=AUTH)
         body = resp.json()
         assert [a["alert_id"] for a in body["alerts"]] == ["a1"]
+
+
+def test_list_alerts_filters_by_escalated():
+    alerts = [
+        _valid_alert("a1", escalated=True, escalation_trigger="openset", unknown_mass=0.63),
+        _valid_alert("a2", escalated=False),
+    ]
+    app, store = _app_with_alerts(alerts)
+    with TestClient(app) as client:
+        assert _wait_for(lambda: store.count_alerts() == 2)
+
+        resp = client.get("/api/alerts", params={"escalated": "true"}, auth=AUTH)
+        body = resp.json()
+        assert [a["alert_id"] for a in body["alerts"]] == ["a1"]
+        assert body["alerts"][0]["unknown_mass"] == pytest.approx(0.63)
+        assert body["alerts"][0]["escalation_trigger"] == "openset"
+
+
+def test_get_explanation_404_when_alert_does_not_exist():
+    app, _ = _app_with_alerts([])
+    with TestClient(app) as client:
+        resp = client.get("/api/alerts/nope/explanation", auth=AUTH)
+        assert resp.status_code == 404
+
+
+def test_get_explanation_404_when_alert_exists_but_not_yet_explained():
+    app, store = _app_with_alerts([_valid_alert("a1", escalated=True)])
+    with TestClient(app) as client:
+        assert _wait_for(lambda: store.count_alerts() == 1)
+        resp = client.get("/api/alerts/a1/explanation", auth=AUTH)
+        assert resp.status_code == 404
+
+
+def test_get_explanation_returns_it_once_ingested():
+    app, store = _app_with_alerts(
+        [_valid_alert("a1", escalated=True, escalation_trigger="openset")],
+        explanations=[_valid_explanation("e1", "a1")],
+    )
+    with TestClient(app) as client:
+        assert _wait_for(lambda: store.get_explanation_for_alert("a1") is not None)
+
+        resp = client.get("/api/alerts/a1/explanation", auth=AUTH)
+        assert resp.status_code == 200
+        body = resp.json()
+        assert body["suspected_technique_id"] == "T1110"
+        assert body["recommended_action"] == "Block the source IP."
+
+
+def test_get_explanation_requires_auth():
+    app, _ = _app_with_alerts([])
+    with TestClient(app) as client:
+        resp = client.get("/api/alerts/nope/explanation")
+        assert resp.status_code == 401
 
 
 def test_get_alert_by_id_and_404():
@@ -214,3 +299,51 @@ def test_websocket_receives_live_broadcast_alert():
             assert received["alert_id"] == "live-1"
 
         assert _wait_for(lambda: store.count_alerts() == 1)
+
+
+class _QueueExplanationEventSource(ExplanationEventSource):
+    """Explanation-side counterpart to _QueueAlertEventSource above."""
+
+    def __init__(self) -> None:
+        self._queue: "queue_module.Queue" = queue_module.Queue()
+
+    def push(self, explanation) -> None:
+        self._queue.put(explanation)
+
+    def __iter__(self):
+        while True:
+            item = self._queue.get()
+            if item is None:
+                return
+            yield item
+
+    def close(self) -> None:
+        self._queue.put(None)
+
+
+def test_websocket_receives_live_broadcast_explanation_with_type_marker():
+    alert_source = _QueueAlertEventSource()
+    explanation_source = _QueueExplanationEventSource()
+    store = AlertStore(":memory:")
+    app = create_app(
+        settings=Settings(use_stub_source=True, db_path=":memory:"),
+        auth_settings=AuthSettings(username=AUTH[0], password=AUTH[1]),
+        source=alert_source,
+        store=store,
+        explanation_source=explanation_source,
+    )
+    with TestClient(app) as client:
+        token = client.post("/api/ws-token", auth=AUTH).json()["token"]
+
+        with client.websocket_connect(f"/ws/alerts?token={token}") as ws:
+            alert_source.push(_valid_alert("live-1", escalated=True, escalation_trigger="openset"))
+            alert_msg = ws.receive_json()
+            assert "__type" not in alert_msg  # unmarked -- the pre-existing, unchanged alert broadcast shape
+
+            explanation_source.push(_valid_explanation("live-e1", "live-1"))
+            explanation_msg = ws.receive_json()
+            assert explanation_msg["__type"] == "explanation"
+            assert explanation_msg["explanation_id"] == "live-e1"
+            assert explanation_msg["alert_id"] == "live-1"
+
+        assert _wait_for(lambda: store.get_explanation_for_alert("live-1") is not None)

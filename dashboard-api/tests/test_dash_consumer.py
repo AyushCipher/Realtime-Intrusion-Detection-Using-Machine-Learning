@@ -21,6 +21,9 @@ def _valid_alert(alert_id="a1"):
         "stage2_class_probabilities": {"DoS/DDoS": 0.9, "BENIGN": 0.1},
         "severity": "high",
         "explanation": [],
+        "unknown_mass": 0.0,
+        "escalated": False,
+        "escalation_trigger": "",
         "model_version": "two-stage-v1",
         "schema_version": 1,
     }

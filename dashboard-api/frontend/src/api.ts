@@ -4,7 +4,7 @@
 // That is a deliberate, minimal trade-off consistent with this project's
 // documented "Basic auth is a known-minimal gap" stance; see the README.
 
-import type { Alert, AlertListResponse, SummaryResponse, TriageStatus } from "./types";
+import type { Alert, AlertListResponse, SummaryResponse, Tier2Explanation, Tier2ExplanationBroadcast, TriageStatus } from "./types";
 
 export const API_BASE_URL: string = (import.meta.env.VITE_API_BASE_URL as string) || "http://localhost:8000";
 const WS_BASE_URL: string = API_BASE_URL.replace(/^http/, "ws");
@@ -59,6 +59,7 @@ export interface AlertFilters {
   start_time?: number;
   end_time?: number;
   triage_status?: string;
+  escalated?: boolean;
   limit?: number;
   offset?: number;
 }
@@ -92,6 +93,22 @@ export function setTriage(
   });
 }
 
+/**
+ * Fetches Tier 2's explanation for an alert. Returns null (not a thrown
+ * error) when none exists yet -- this is the expected, normal state for
+ * most escalated alerts most of the time, given Tier 2's real measured
+ * latency (5-40+ seconds/alert, see ml/README.md's Latency section), not
+ * something callers should have to handle via try/catch.
+ */
+export async function getExplanation(creds: Credentials, alertId: string): Promise<Tier2Explanation | null> {
+  try {
+    return await request<Tier2Explanation>(`/api/alerts/${encodeURIComponent(alertId)}/explanation`, creds);
+  } catch (err) {
+    if (err instanceof ApiError && err.status === 404) return null;
+    throw err;
+  }
+}
+
 async function fetchWsToken(creds: Credentials): Promise<string> {
   const resp = await request<{ token: string; expires_in: number }>("/api/ws-token", creds, { method: "POST" });
   return resp.token;
@@ -101,11 +118,18 @@ async function fetchWsToken(creds: Credentials): Promise<string> {
  * Opens the live alert WebSocket. Fetches a short-lived token via the
  * Basic-auth-protected REST endpoint first, since browsers cannot attach an
  * Authorization header to a WebSocket handshake -- see routes_ws.py.
+ *
+ * One connection carries two message shapes -- see explanation_ingest_
+ * service.py: alert broadcasts are unmarked (the original, unchanged
+ * shape, dispatched to `onAlert`), explanation broadcasts carry a
+ * `__type: "explanation"` marker (dispatched to `onExplanation`, optional
+ * -- callers that only care about alerts can omit it).
  */
 export async function connectAlertStream(
   creds: Credentials,
   onAlert: (alert: Alert) => void,
   onStatusChange: (status: "connecting" | "open" | "closed" | "error") => void,
+  onExplanation?: (explanation: Tier2ExplanationBroadcast) => void,
 ): Promise<() => void> {
   const token = await fetchWsToken(creds);
   onStatusChange("connecting");
@@ -116,7 +140,12 @@ export async function connectAlertStream(
   ws.onerror = () => onStatusChange("error");
   ws.onmessage = (event) => {
     try {
-      onAlert(JSON.parse(event.data) as Alert);
+      const parsed = JSON.parse(event.data) as Alert | Tier2ExplanationBroadcast;
+      if ("__type" in parsed && parsed.__type === "explanation") {
+        onExplanation?.(parsed);
+      } else {
+        onAlert(parsed as Alert);
+      }
     } catch {
       // ignore malformed frames rather than crashing the live feed
     }

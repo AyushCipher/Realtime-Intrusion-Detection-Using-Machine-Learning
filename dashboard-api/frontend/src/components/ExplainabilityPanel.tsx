@@ -1,9 +1,47 @@
+import { useEffect, useState } from "react";
 import { Bar, BarChart, CartesianGrid, Cell, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
-import type { Alert } from "../types";
+import { getExplanation, type Credentials } from "../api";
+import type { Alert, Tier2Explanation } from "../types";
 import SeverityBadge from "./SeverityBadge";
 
-export default function ExplainabilityPanel({ alert, onClose }: { alert: Alert | null; onClose: () => void }) {
+export default function ExplainabilityPanel({
+  alert,
+  creds,
+  liveExplanation,
+  onClose,
+}: {
+  alert: Alert | null;
+  creds: Credentials;
+  liveExplanation?: Tier2Explanation;
+  onClose: () => void;
+}) {
+  const [fetchedExplanation, setFetchedExplanation] = useState<Tier2Explanation | null>(null);
+  const [explanationLoading, setExplanationLoading] = useState(false);
+
+  useEffect(() => {
+    setFetchedExplanation(null);
+    if (!alert?.escalated) return;
+
+    let cancelled = false;
+    setExplanationLoading(true);
+    getExplanation(creds, alert.alert_id)
+      .then((result) => {
+        if (!cancelled) setFetchedExplanation(result);
+      })
+      .finally(() => {
+        if (!cancelled) setExplanationLoading(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [alert?.alert_id, alert?.escalated, creds]);
+
   if (!alert) return null;
+
+  // A live WebSocket push (if one has arrived for this alert) always wins
+  // over the REST fetch, since it can only be more recent.
+  const tier2Explanation = liveExplanation ?? fetchedExplanation;
 
   const chartData = [...alert.explanation].sort((a, b) => Math.abs(b.shap_value) - Math.abs(a.shap_value));
 
@@ -19,6 +57,7 @@ export default function ExplainabilityPanel({ alert, onClose }: { alert: Alert |
       <div className="explain-meta">
         <SeverityBadge severity={alert.severity} />
         <span className="explain-class">{alert.stage2_predicted_class}</span>
+        {alert.escalated && <span className="escalated-badge">ESCALATED</span>}
       </div>
 
       <dl className="explain-fields">
@@ -34,9 +73,51 @@ export default function ExplainabilityPanel({ alert, onClose }: { alert: Alert |
         </dd>
         <dt>Stage 2 confidence</dt>
         <dd>{(alert.stage2_confidence * 100).toFixed(1)}%</dd>
+        <dt>Unknown mass (open-set)</dt>
+        <dd>
+          {alert.unknown_mass.toFixed(3)}
+          {alert.escalation_trigger && ` (${alert.escalation_trigger} gate)`}
+        </dd>
         <dt>Model version</dt>
         <dd>{alert.model_version}</dd>
       </dl>
+
+      {alert.escalated && (
+        <>
+          <h3>Tier 2 analysis (LLM/RAG)</h3>
+          {explanationLoading && !tier2Explanation ? (
+            <p className="explain-empty">Loading...</p>
+          ) : tier2Explanation ? (
+            <div className="tier2-explanation">
+              <dl className="explain-fields">
+                <dt>Suspected technique</dt>
+                <dd>
+                  {tier2Explanation.suspected_technique_id
+                    ? `${tier2Explanation.suspected_technique_id} (${tier2Explanation.suspected_technique_name})`
+                    : "None identified"}
+                </dd>
+                <dt>Risk explanation</dt>
+                <dd>{tier2Explanation.risk_explanation}</dd>
+                <dt>Recommended action</dt>
+                <dd>{tier2Explanation.recommended_action}</dd>
+                <dt>Grounding</dt>
+                <dd>
+                  {tier2Explanation.rag_enabled
+                    ? `RAG-grounded (${tier2Explanation.retrieved_technique_ids.join(", ") || "none retrieved"})`
+                    : "Bare LLM (RAG disabled)"}
+                </dd>
+                <dt>LLM latency</dt>
+                <dd>{(tier2Explanation.llm_latency_ms / 1000).toFixed(1)}s</dd>
+              </dl>
+            </div>
+          ) : (
+            <p className="explain-empty">
+              Escalated -- Tier 2 analysis pending. This can take anywhere from several seconds to a minute or more
+              (real, measured latency -- see the project README), not an error.
+            </p>
+          )}
+        </>
+      )}
 
       <h3>Why this prediction (SHAP)</h3>
       {chartData.length === 0 ? (

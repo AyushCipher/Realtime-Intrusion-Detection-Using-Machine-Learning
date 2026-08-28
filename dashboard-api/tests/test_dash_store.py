@@ -3,7 +3,16 @@ import pytest
 from ids_dashboard.store import AlertStore
 
 
-def _make_alert(alert_id, severity="high", predicted_class="DoS/DDoS", scored_at=1_700_000_000.0, stage1_flagged=True):
+def _make_alert(
+    alert_id,
+    severity="high",
+    predicted_class="DoS/DDoS",
+    scored_at=1_700_000_000.0,
+    stage1_flagged=True,
+    unknown_mass=0.0,
+    escalated=False,
+    escalation_trigger="",
+):
     return {
         "alert_id": alert_id,
         "flow_id": f"flow-{alert_id}",
@@ -21,7 +30,34 @@ def _make_alert(alert_id, severity="high", predicted_class="DoS/DDoS", scored_at
         "stage2_class_probabilities": {predicted_class: 0.95, "BENIGN": 0.05},
         "severity": severity,
         "explanation": [{"feature": "flow_duration", "value": 0.1, "shap_value": 0.5}],
+        "unknown_mass": unknown_mass,
+        "escalated": escalated,
+        "escalation_trigger": escalation_trigger,
         "model_version": "two-stage-v1",
+        "schema_version": 1,
+    }
+
+
+def _make_explanation(
+    explanation_id,
+    alert_id,
+    generated_at=1_700_000_010.0,
+    suspected_technique_id="T1110",
+    rag_enabled=True,
+):
+    return {
+        "explanation_id": explanation_id,
+        "alert_id": alert_id,
+        "flow_id": f"flow-{alert_id}",
+        "generated_at": generated_at,
+        "suspected_technique_id": suspected_technique_id,
+        "suspected_technique_name": "Brute Force",
+        "risk_explanation": "Traffic pattern matches brute-force indicators.",
+        "recommended_action": "Block the source IP.",
+        "retrieved_technique_ids": [suspected_technique_id],
+        "rag_enabled": rag_enabled,
+        "llm_latency_ms": 5750.0,
+        "model_version": "gemini-3.6-flash",
         "schema_version": 1,
     }
 
@@ -169,3 +205,92 @@ def test_summary_analyst_reviewed_false_positive_rate():
     assert reviewed["false_positive_count"] == 1
     assert reviewed["rate"] == pytest.approx(0.5)
     assert reviewed["total_count"] == 4
+
+
+# --- Open-set fields (unknown_mass/escalated/escalation_trigger) ----------
+
+
+def test_insert_and_get_round_trips_open_set_fields():
+    store = _store()
+    store.insert_alert(_make_alert("a1", unknown_mass=0.63, escalated=True, escalation_trigger="openset"))
+
+    fetched = store.get_alert("a1")
+    assert fetched["unknown_mass"] == pytest.approx(0.63)
+    assert fetched["escalated"] is True
+    assert fetched["escalation_trigger"] == "openset"
+
+
+def test_insert_defaults_open_set_fields_when_not_escalated():
+    store = _store()
+    store.insert_alert(_make_alert("a1"))
+    fetched = store.get_alert("a1")
+    assert fetched["unknown_mass"] == 0.0
+    assert fetched["escalated"] is False
+    assert fetched["escalation_trigger"] == ""
+
+
+def test_list_and_count_alerts_filter_by_escalated():
+    store = _store()
+    store.insert_alert(_make_alert("a1", escalated=True, escalation_trigger="openset"))
+    store.insert_alert(_make_alert("a2", escalated=False))
+    store.insert_alert(_make_alert("a3", escalated=True, escalation_trigger="softmax"))
+
+    escalated_only = store.list_alerts(escalated=True)
+    assert {a["alert_id"] for a in escalated_only} == {"a1", "a3"}
+    assert store.count_alerts(escalated=True) == 2
+
+    not_escalated = store.list_alerts(escalated=False)
+    assert {a["alert_id"] for a in not_escalated} == {"a2"}
+    assert store.count_alerts(escalated=False) == 1
+
+    assert store.count_alerts() == 3  # escalated=None (default): no filter
+
+
+# --- Tier 2 explanations ---------------------------------------------------
+
+
+def test_insert_and_get_explanation_round_trip():
+    store = _store()
+    store.insert_alert(_make_alert("a1", escalated=True, escalation_trigger="openset"))
+    assert store.insert_explanation(_make_explanation("e1", "a1")) is True
+
+    fetched = store.get_explanation_for_alert("a1")
+    assert fetched["explanation_id"] == "e1"
+    assert fetched["suspected_technique_id"] == "T1110"
+    assert fetched["retrieved_technique_ids"] == ["T1110"]
+    assert fetched["rag_enabled"] is True
+    assert fetched["llm_latency_ms"] == pytest.approx(5750.0)
+
+
+def test_get_explanation_for_alert_returns_none_when_absent():
+    store = _store()
+    store.insert_alert(_make_alert("a1", escalated=True))
+    assert store.get_explanation_for_alert("a1") is None
+
+
+def test_get_explanation_for_alert_returns_the_most_recent():
+    store = _store()
+    store.insert_alert(_make_alert("a1", escalated=True))
+    store.insert_explanation(_make_explanation("e1", "a1", generated_at=1000.0))
+    store.insert_explanation(_make_explanation("e2", "a1", generated_at=2000.0, suspected_technique_id="T1046"))
+
+    fetched = store.get_explanation_for_alert("a1")
+    assert fetched["explanation_id"] == "e2"
+    assert fetched["suspected_technique_id"] == "T1046"
+
+
+def test_duplicate_explanation_insert_is_ignored():
+    store = _store()
+    store.insert_alert(_make_alert("a1", escalated=True))
+    explanation = _make_explanation("e1", "a1")
+    assert store.insert_explanation(explanation) is True
+    assert store.insert_explanation(explanation) is False
+
+
+def test_insert_explanation_does_not_require_the_alert_to_exist_yet():
+    # Kafka delivery order between network.ids.alerts and
+    # network.ids.explanations isn't guaranteed -- see insert_explanation's
+    # docstring.
+    store = _store()
+    assert store.insert_explanation(_make_explanation("e1", "not-yet-inserted")) is True
+    assert store.get_explanation_for_alert("not-yet-inserted")["explanation_id"] == "e1"

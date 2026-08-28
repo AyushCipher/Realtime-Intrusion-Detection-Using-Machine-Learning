@@ -41,6 +41,7 @@ def build_router(get_auth_user) -> APIRouter:
         start_time: Optional[float] = Query(None, description="Unix epoch seconds, inclusive"),
         end_time: Optional[float] = Query(None, description="Unix epoch seconds, inclusive"),
         triage_status: Optional[str] = Query(None),
+        escalated: Optional[bool] = Query(None, description="Filter to alerts ml's open-set gate escalated (or didn't)"),
         limit: int = Query(50, ge=1, le=500),
         offset: int = Query(0, ge=0),
     ):
@@ -51,6 +52,7 @@ def build_router(get_auth_user) -> APIRouter:
             start_time=start_time,
             end_time=end_time,
             triage_status=triage_status,
+            escalated=escalated,
             limit=limit,
             offset=offset,
         )
@@ -60,6 +62,7 @@ def build_router(get_auth_user) -> APIRouter:
             start_time=start_time,
             end_time=end_time,
             triage_status=triage_status,
+            escalated=escalated,
         )
         return {"alerts": alerts, "total": total, "limit": limit, "offset": offset}
 
@@ -77,6 +80,23 @@ def build_router(get_auth_user) -> APIRouter:
         if alert is None:
             raise HTTPException(status_code=404, detail="alert not found")
         return alert
+
+    @router.get("/alerts/{alert_id}/explanation")
+    def get_explanation(alert_id: str, request: Request):
+        """Tier 2's explanation for this alert, if one exists yet. 404 both
+        when the alert itself doesn't exist and when it exists but Tier 2
+        hasn't (or won't -- e.g. it was never escalated) produce an
+        explanation for it -- the caller already knows an alert's
+        `escalated` flag from `GET /api/alerts/{id}` and can use that to
+        tell "not escalated" apart from "escalated, not explained yet"
+        without a different status code here."""
+        store = _store(request)
+        if store.get_alert(alert_id) is None:
+            raise HTTPException(status_code=404, detail="alert not found")
+        explanation = store.get_explanation_for_alert(alert_id)
+        if explanation is None:
+            raise HTTPException(status_code=404, detail="no explanation for this alert yet")
+        return explanation
 
     @router.patch("/alerts/{alert_id}/triage")
     def set_triage(alert_id: str, body: TriageUpdate, request: Request):

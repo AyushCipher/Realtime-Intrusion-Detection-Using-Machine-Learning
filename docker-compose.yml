@@ -49,6 +49,27 @@ services:
       ML_BOOTSTRAP_SERVERS: "kafka:9092"
     restart: on-failure
 
+  # Consumes ml's network.ids.alerts topic (filtering client-side for
+  # escalated == true -- see tier2_reasoner/README.md), reasons over each
+  # escalated alert, and publishes network.ids.explanations. Falls back to
+  # the deterministic stub LLM client (no API key, no cost) unless
+  # GEMINI_API_KEY or ANTHROPIC_API_KEY is set -- e.g. in a local,
+  # gitignored .env file at the repo root (docker compose reads it
+  # automatically; see .gitignore). Real-LLM mode is genuinely slow (median
+  # ~5-40s per escalated alert, live-measured -- see
+  # tier2_reasoner/README.md's Latency section), so don't expect real-time
+  # explanations even with a key configured.
+  tier2-reasoner:
+    build: ./tier2_reasoner
+    depends_on:
+      kafka:
+        condition: service_healthy
+    environment:
+      TIER2_BOOTSTRAP_SERVERS: "kafka:9092"
+      GEMINI_API_KEY: "${GEMINI_API_KEY:-}"
+      ANTHROPIC_API_KEY: "${ANTHROPIC_API_KEY:-}"
+    restart: on-failure
+
   dashboard-api:
     build: ./dashboard-api
     depends_on:
