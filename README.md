@@ -200,13 +200,21 @@ enough to say anything about detection quality or the dashboard's
 volume/severity views at any real scale.
 
 **Tier 2 reasoning (`tier2_reasoner/`) is real, tested, and standalone --
-not wired into this system.** It has its own passing test suite (54
-tests) and CLI, and its LLM path has now been verified live against a
-real Gemini API key (real explanations, real measured latency ~5.75s
-median -- see `tier2_reasoner/README.md`'s "Latency" section), though not
-yet at any statistically meaningful scale. Still missing: it's not in
-`docker-compose.yml`, `ml`'s Dockerfile/entrypoint don't build the
-`gate=`/`escalation_gate=` options needed to actually populate
-`escalated: true` alerts for the demo model, and `dashboard-api` doesn't
-consume `network.ids.explanations`. `integration/test_e2e.py` does not
-exercise any of this.
+not wired into this system, and its own live testing found it is not
+currently reliable or fast enough to call real-time.** It has its own
+passing test suite (54 tests) and CLI, and its LLM path has now been
+verified live against two real API keys: 9/9 completed RAG-enabled calls
+correctly named the right MITRE technique (a real, consistent, positive
+signal), but a real batch run also surfaced the honest problem --
+2 of 6 calls in one batch failed outright even after retries, all 6
+no-RAG calls in that same batch failed too, and the calls that did
+succeed took 23.5-60.4 seconds each (vs. 2.6s for an earlier isolated
+call) -- see `tier2_reasoner/README.md`'s "Latency (live-verified -- and
+a reliability problem)" section. The batch-measured amortized latency is
+~4,056ms/flow (~420x Tier 1's own latency), not the ~584ms an earlier
+single fast call suggested. No retry/backoff logic exists in the module
+yet. Also still missing: it's not in `docker-compose.yml`, `ml`'s
+Dockerfile/entrypoint don't build the `gate=`/`escalation_gate=` options
+needed to actually populate `escalated: true` alerts for the demo model,
+and `dashboard-api` doesn't consume `network.ids.explanations`.
+`integration/test_e2e.py` does not exercise any of this.

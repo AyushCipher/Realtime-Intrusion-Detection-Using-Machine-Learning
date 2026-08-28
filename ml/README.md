@@ -599,21 +599,28 @@ tier2_latency_ms)` is the number that actually matters once a Tier 2
 exists: every flow pays Tier 1's cost, only the escalated fraction
 additionally pays Tier 2's. Tier 2 (`tier2_reasoner/`) now exists -- its
 own orchestration overhead (retrieval + prompt building) measures at a
-negligible 0.58ms. **The real LLM call itself is now measured, not
-estimated** -- 7 live Gemini 2.5 Flash calls during testing (see
-`tier2_reasoner/README.md`'s "Latency" section) gave a median of ~5,750ms,
-replacing the earlier 3-5s literature estimate. At this pipeline's real
-Tier 1 latency (9.67ms) and a 10% escalation budget:
+negligible 0.58ms. **The real LLM call itself is now measured across two
+live sessions, and the second (a real 6-call batch, not an isolated
+call) told a substantially worse story than the first** -- see
+`tier2_reasoner/README.md`'s "Latency (live-verified -- and a
+reliability problem)" section for the full picture: a fast isolated
+call (~2.6s) was not representative of a real batch, where only 4 of 6
+calls succeeded, at 23.5-60.4s each, with 2 of 6 failing outright even
+after retries. Using the batch-measured median (~40,464ms) as the more
+representative number, at this pipeline's real Tier 1 latency (9.67ms)
+and a 10% escalation budget:
 
 ```
-amortized = 9.67 + 0.10 * 5750  =  ~584 ms/flow
+amortized = 9.67 + 0.10 * 40464  =  ~4,056 ms/flow
 ```
 
-That's ~60x Tier 1's own latency -- slightly worse than the earlier
-estimate suggested, now backed by a real (if small, n=7) sample instead
-of a guess. Getting to a genuinely "real-time" amortized latency means
-either pushing the escalation budget well below 10%, or using a
-materially faster model for Tier 2, or both.
+That's roughly **420x** Tier 1's own latency -- not the ~60x an earlier
+single fast call suggested. This is the real, batch-measured number, and
+the honest conclusion it supports is that this pipeline is not
+real-time under any sustained load in its current form: it needs a much
+lower escalation budget, a faster/more reliable model, and actual
+retry/backoff logic (none exists in `tier2_reasoner` yet) before that
+claim could be made honestly.
 
 ## Serving
 
