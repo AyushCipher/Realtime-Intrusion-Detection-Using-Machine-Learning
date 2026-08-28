@@ -12,6 +12,16 @@ Google AI Studio keys work on the free tier immediately with no payment
 method). `--no-rag` disables retrieval (the H3 ablation switch: does
 grounding the LLM in retrieved ATT&CK context actually improve
 explanation quality, vs. a bare LLM call).
+
+Real clients (`anthropic`/`gemini`) are wrapped in `retry.RetryingLLMClient`
+by default -- built after live testing showed transient 503s, hard 429
+rate limits, and ConnectError failures all occur in practice (see
+README's "Latency (live-verified -- and a reliability problem)" section).
+`--min-interval-s` paces requests proactively to stay under a known
+per-minute limit instead of only reacting after hitting it; `--max-retries`
+and `--base-backoff-s` control reactive retry. `--no-retry` disables the
+wrapper entirely (e.g. for isolating whether a failure is retry logic vs.
+the underlying client).
 """
 
 from __future__ import annotations
@@ -22,8 +32,9 @@ import sys
 
 from .alert_consumer import KafkaEscalatedAlertSource, StubEscalatedAlertSource
 from .explanation_producer import KafkaExplanationProducer, StubExplanationProducer
-from .llm_client import AnthropicLLMClient, GeminiLLMClient, StubLLMClient
+from .llm_client import AnthropicLLMClient, GeminiLLMClient, LLMClient, StubLLMClient
 from .reasoner import Tier2Reasoner
+from .retry import RetryingLLMClient
 from .schema import ALERT_TOPIC, EXPLANATION_TOPIC
 from .service import Tier2Service
 
@@ -41,8 +52,36 @@ def parse_args(argv=None) -> argparse.Namespace:
     parser.add_argument("--gemini-model", default="gemini-3.6-flash")
     parser.add_argument("--no-rag", action="store_true", help="Disable retrieval (bare-LLM ablation)")
     parser.add_argument("--top-k", type=int, default=3, help="Retrieved technique count when RAG is enabled")
+    parser.add_argument("--no-retry", action="store_true", help="Disable RetryingLLMClient (real clients only)")
+    parser.add_argument("--max-retries", type=int, default=4)
+    parser.add_argument("--base-backoff-s", type=float, default=15.0)
+    parser.add_argument(
+        "--min-interval-s",
+        type=float,
+        default=12.0,
+        help="Minimum seconds between LLM calls, paced proactively -- default 12s matches the 5 requests/minute "
+        "free-tier limit observed live for Gemini (see README); set to 0 to disable pacing",
+    )
     parser.add_argument("-v", "--verbose", action="store_true")
     return parser.parse_args(argv)
+
+
+def build_llm_client(args: argparse.Namespace) -> LLMClient:
+    if args.llm == "anthropic":
+        real_client: LLMClient = AnthropicLLMClient(model=args.anthropic_model)
+    elif args.llm == "gemini":
+        real_client = GeminiLLMClient(model=args.gemini_model)
+    else:
+        return StubLLMClient()
+
+    if args.no_retry:
+        return real_client
+    return RetryingLLMClient(
+        inner=real_client,
+        max_retries=args.max_retries,
+        base_backoff_s=args.base_backoff_s,
+        min_interval_s=args.min_interval_s,
+    )
 
 
 def main(argv=None) -> int:
@@ -52,12 +91,7 @@ def main(argv=None) -> int:
         format="%(asctime)s %(levelname)s %(name)s: %(message)s",
     )
 
-    if args.llm == "anthropic":
-        llm_client = AnthropicLLMClient(model=args.anthropic_model)
-    elif args.llm == "gemini":
-        llm_client = GeminiLLMClient(model=args.gemini_model)
-    else:
-        llm_client = StubLLMClient()
+    llm_client = build_llm_client(args)
 
     reasoner = Tier2Reasoner(llm_client, use_rag=not args.no_rag, top_k=args.top_k)
 
