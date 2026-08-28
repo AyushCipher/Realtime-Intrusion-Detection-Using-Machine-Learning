@@ -38,7 +38,7 @@ def parse_args(argv=None) -> argparse.Namespace:
     parser.add_argument("--use-stub", action="store_true", help="Use in-memory stubs instead of Kafka")
     parser.add_argument("--llm", choices=["stub", "anthropic", "gemini"], default="stub")
     parser.add_argument("--anthropic-model", default="claude-sonnet-5")
-    parser.add_argument("--gemini-model", default="gemini-2.5-flash")
+    parser.add_argument("--gemini-model", default="gemini-3.6-flash")
     parser.add_argument("--no-rag", action="store_true", help="Disable retrieval (bare-LLM ablation)")
     parser.add_argument("--top-k", type=int, default=3, help="Retrieved technique count when RAG is enabled")
     parser.add_argument("-v", "--verbose", action="store_true")

@@ -200,14 +200,22 @@ this module *except* the LLM call itself), measured with
 over 7 short documents is not where the cost lives.
 
 **The real LLM call dominates, and it is now measured, not estimated.**
-7 successful live Gemini 2.5 Flash calls (RAG-enabled) during testing:
-4,503 / 5,708 / 5,746 / 5,750 / 5,976 / 6,095 / 6,382 ms -- median
-**~5,750 ms**. 3 no-RAG calls: 4,482 / 4,504 / 6,912 ms -- median
+7 successful live `gemini-2.5-flash` calls (RAG-enabled) during initial
+testing: 4,503 / 5,708 / 5,746 / 5,750 / 5,976 / 6,095 / 6,382 ms --
+median **~5,750 ms**. 3 no-RAG calls: 4,482 / 4,504 / 6,912 ms -- median
 **~4,504 ms**, though n=3 is too small to say RAG meaningfully changes
 latency rather than just call-to-call variance; both sit in roughly the
-same 4.5-6.9s range. This lines up with (and now replaces) the earlier
-3-5s literature estimate for LLM-based SOC triage -- reality is if
-anything slightly higher.
+same 4.5-6.9s range.
+
+**Model note, itself a finding:** `gemini-2.5-flash` (the model all the
+numbers above were measured against, and this module's original default)
+returned a live 404 ("no longer available to new users") when tested
+against a second, newer API key -- Google's own error message pointed to
+`gemini-3.6-flash` as the replacement, now this module's default. One
+call against it: **2,623 ms** -- notably faster than the 2.5-flash
+median above, though n=1, not yet a real comparison. Google's available
+Flash models move over time; if the default 404s for you, the live error
+message names the current replacement, same as it did here.
 
 Combined with `ml/README.md`'s measured Tier 1 latency (9.67ms median
 single-flow) and this project's 10% target escalation budget,
