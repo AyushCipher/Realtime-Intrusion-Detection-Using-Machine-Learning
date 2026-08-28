@@ -160,38 +160,51 @@ fields. This exists for the H3 comparison the original research plan
 named: does RAG grounding actually change/improve the explanation, vs. a
 bare LLM call.
 
-**A small, real, live comparison has now been run** (not the full
-statistically-powered ablation this still needs, but a real first
-result, not a guess): 3 escalated alerts (Brute Force, DoS/DDoS,
-PortScan), each explained with RAG enabled and again with it disabled,
-against real Gemini 2.5 Flash calls.
+**A small, real, live comparison has now been run twice** (not the full
+statistically-powered ablation this still needs, but real, growing
+evidence, not a guess): first 3 escalated alerts (Brute Force, DoS/DDoS,
+PortScan) against `gemini-2.5-flash`, then a 6-category batch (adding Web
+Attack, Infiltration, Botnet) against `gemini-3.6-flash`.
 
 | | with RAG | without RAG |
 |---|---|---|
-| Brute Force | `T1110` (correct) | `""` -- explicitly declined, cited "no reference technique retrieved" |
-| DoS/DDoS | `T1498` (correct) | `""` -- same |
-| PortScan | `T1046` (correct) | `""` -- same |
+| Brute Force | `T1110` (correct) -- confirmed twice, both models | `""` -- explicitly declined, cited "no reference technique retrieved" |
+| DoS/DDoS | `T1498` (correct) -- confirmed twice, both models | `""` -- same |
+| PortScan | `T1046` (correct) -- confirmed twice, both models | `""` -- same |
+| Web Attack | `T1190` (correct) | not attempted (call failed after retries -- see below) |
+| Infiltration | call failed after 4 retries (see [Latency](#latency-live-verified--and-a-reliability-problem)) | not attempted |
+| Botnet | call failed after 4 retries | not attempted |
 
-**5 of 5 RAG-enabled live calls across this and the connectivity-check
-run correctly named the technique this project's own knowledge base
-associates with that category. All 3 no-RAG calls correctly followed the
-system prompt's instruction not to invent a technique ID when none was
-retrieved**, instead reasoning qualitatively from the alert's own fields
-(e.g. citing PortScan's category name and describing "reconnaissance
-activity" without an ATT&CK ID). That's the real, observed effect of
-RAG here: specific, correct technique attribution vs. none at all, not
-a difference in how coherent the free-text reasoning reads.
+**9 of 9 RAG-enabled live calls that actually completed, across two
+sessions and two models, correctly named the technique this project's
+own knowledge base associates with that category. Zero incorrect
+technique attributions observed so far.** All 3 no-RAG calls that
+completed (all from the first session) correctly followed the system
+prompt's instruction not to invent a technique ID when none was
+retrieved, instead reasoning qualitatively from the alert's own fields.
+That's the real, observed effect of RAG here: specific, correct
+technique attribution vs. none at all -- and it's held up consistently
+so far, not just in the first small sample.
 
-This is n=3 alerts, not a rigorous ablation -- no seeds, no significance
-test, no sample large enough to claim a statistically supported result.
-Turning this into H3 properly means running this same technique-ID-match
-comparison across many more escalated alerts (the mapping in
-`knowledge_base.py` makes "did it name the right technique" an
-automatable, countable outcome -- no human evaluation required for this
-specific proxy metric) with a paired significance test, the same
-treatment H1/H2 got in `ml/`. Not yet built.
+**The second session's no-RAG batch (all 6 calls) failed outright**,
+and 2 of the 6 RAG calls also failed even after retries -- see
+[Latency](#latency-live-verified--and-a-reliability-problem) for why
+this is a real reliability finding, not just missing data, and why the
+no-RAG evidence above still stands at n=3, not n=9.
 
-## Latency (live-verified)
+This is still n=9 (RAG) / n=3 (no-RAG) alerts, not a rigorous ablation --
+no seeds, no significance test, no sample large enough to claim a
+statistically supported result, and now a real, observed reliability
+ceiling on how large a live batch can even complete. Turning this into
+H3 properly means running this same technique-ID-match comparison across
+many more escalated alerts (the mapping in `knowledge_base.py` makes
+"did it name the right technique" an automatable, countable outcome --
+no human evaluation required for this specific proxy metric) with a
+paired significance test, the same treatment H1/H2 got in `ml/` --
+and, per the finding below, budgeting for a much slower, retry-tolerant
+collection process than "just call it in a loop." Not yet built.
+
+## Latency (live-verified -- and a reliability problem)
 
 Orchestration overhead (retrieval + prompt construction, everything in
 this module *except* the LLM call itself), measured with
@@ -199,47 +212,69 @@ this module *except* the LLM call itself), measured with
 **0.581 ms/call**. Negligible, as expected -- TF-IDF cosine similarity
 over 7 short documents is not where the cost lives.
 
-**The real LLM call dominates, and it is now measured, not estimated.**
-7 successful live `gemini-2.5-flash` calls (RAG-enabled) during initial
-testing: 4,503 / 5,708 / 5,746 / 5,750 / 5,976 / 6,095 / 6,382 ms --
-median **~5,750 ms**. 3 no-RAG calls: 4,482 / 4,504 / 6,912 ms -- median
-**~4,504 ms**, though n=3 is too small to say RAG meaningfully changes
-latency rather than just call-to-call variance; both sit in roughly the
-same 4.5-6.9s range.
+**The real LLM call dominates, and it is now measured across two
+sessions -- and the second session changed the honest answer
+substantially, for the worse.**
 
-**Model note, itself a finding:** `gemini-2.5-flash` (the model all the
-numbers above were measured against, and this module's original default)
-returned a live 404 ("no longer available to new users") when tested
-against a second, newer API key -- Google's own error message pointed to
-`gemini-3.6-flash` as the replacement, now this module's default. One
-call against it: **2,623 ms** -- notably faster than the 2.5-flash
-median above, though n=1, not yet a real comparison. Google's available
-Flash models move over time; if the default 404s for you, the live error
-message names the current replacement, same as it did here.
+Session 1, `gemini-2.5-flash`, 7 successful RAG calls in a short burst:
+4,503 / 5,708 / 5,746 / 5,750 / 5,976 / 6,095 / 6,382 ms -- median ~5,750ms.
+3 no-RAG calls: 4,482 / 4,504 / 6,912 ms -- median ~4,504ms.
+
+Session 2, `gemini-3.6-flash` (a different, newer model on a different
+account): the very first isolated call was fast -- **2,623 ms**. Then a
+6-category batch run immediately after told a very different story: only
+**4 of 6 RAG calls succeeded, at 23,536 / 29,693 / 51,235 / 60,371 ms**
+-- 10-25x slower than that first isolated call -- and **2 of 6 RAG calls,
+plus all 6 no-RAG calls, failed outright** even after 4 retries each with
+growing backoff (20s/40s/60s/80s, up to 200s of waiting per call).
+
+**The honest interpretation: a single isolated call being fast tells you
+almost nothing about what a real batch of traffic will experience.**
+The most likely explanation is a longer-window quota (hourly/daily, not
+just the per-minute limit hit in session 1) getting exhausted partway
+through the batch, which would explain both the cascading failures *and*
+the ballooning latency on the calls that did complete (server-side
+queuing/throttling under the same constraint). This wasn't independently
+confirmed against Google's own quota dashboard -- it's the most plausible
+reading of the evidence, not a verified root cause. Either way, the
+practical conclusion doesn't change: **treat single-call latency numbers
+as a lower bound, not a representative one**, and build in retry/backoff
+(not present anywhere in this module yet -- see [Known
+limitations](#known-limitations)) before trusting this pipeline under any
+sustained load.
 
 Combined with `ml/README.md`'s measured Tier 1 latency (9.67ms median
 single-flow) and this project's 10% target escalation budget,
-`ids_ml.evaluation.amortized_latency_ms` gives:
+`ids_ml.evaluation.amortized_latency_ms`, using the session-2 batch
+median (a more representative, if worse, number than the isolated first
+call):
 
 ```
-amortized = 9.67 + 0.10 * 5750  =  ~584 ms/flow
+amortized = 9.67 + 0.10 * 40464  =  ~4,056 ms/flow
 ```
 
-That's ~60x Tier 1's own latency -- worse than the earlier 309-509ms
-literature-based estimate, now backed by a real (if small) sample instead
-of a guess. Getting this pipeline to a genuinely "real-time" amortized
-latency means pushing the escalation budget well below 10%, or using a
-materially faster model for Tier 2, or both.
+That's roughly **420x** Tier 1's own latency, not the ~60x the first
+(unrepresentative) fast call suggested. This is the real number this
+project has actually measured, and it should be read as a warning, not a
+target: at this budget and this observed batch behavior, "real-time" is
+not an honest description of the current pipeline without either a much
+lower escalation budget, a faster/more reliable model, or real
+retry/backoff and rate-limit-aware request pacing that doesn't exist yet.
 
-Two operational realities observed live, worth planning around rather
-than treating as edge cases: a transient `503 UNAVAILABLE` ("model
-experiencing high demand") on one call, and a hard `429
-RESOURCE_EXHAUSTED` after 5 requests/minute on the free tier. Neither is
-handled with retry/backoff anywhere in this module yet -- `service.py`'s
-`process_alert` catches and logs any reasoner exception and moves on
-(skipping that alert), rather than retrying. Fine for a demo; a real
-deployment needs a retry policy for both, especially the rate limit if
-running above the free tier's request budget.
+Failure modes observed live across both sessions, worth planning around
+rather than treating as edge cases: a transient `503 UNAVAILABLE`
+("model experiencing high demand"), a hard `429 RESOURCE_EXHAUSTED`
+after 5 requests/minute on the free tier (session 1), and unexplained
+`ClientError`/`ConnectError` failures that persisted through 4 retries
+with up to 200s of backoff each (session 2's batch). None of these are
+handled with retry/backoff anywhere in this module's actual code yet --
+`service.py`'s `process_alert` catches and logs any reasoner exception
+and moves on (skipping that alert), with no retry at all. The batch
+script used to collect the session-2 numbers above added its own
+ad-hoc retry loop (not part of this module); even that gave up after 4
+attempts on 2 of 6 alerts. Fine for a demo; a real deployment needs a
+real retry/backoff policy, and probably explicit rate-limit-aware
+request pacing, before this is trustworthy under any sustained load.
 
 ## Serving
 
@@ -286,10 +321,20 @@ available in CI).
   corpus**, and its category-to-technique mapping is this project's own
   reasonable association, not a verified ground truth -- see
   [Retrieval](#retrieval-why-tf-idf-not-embeddings).
-- **No retry/backoff for transient LLM failures.** A live `503`
-  (transient overload) and `429` (rate limit) were both observed during
-  testing -- see [Latency](#latency-live-verified). `service.py` currently
-  just logs and skips the alert on any reasoner exception.
+- **No retry/backoff for transient LLM failures, and this is a
+  confirmed real problem, not a hypothetical one.** A live `503`, a hard
+  `429` rate limit, and unexplained `ClientError`/`ConnectError` failures
+  that persisted through 4 manual retries with up to 200s backoff were
+  all observed live -- 2 of 6 RAG calls and all 6 no-RAG calls failed
+  outright in one real batch run. See [Latency](#latency-live-verified--and-a-reliability-problem).
+  `service.py` currently just logs and skips the alert on any reasoner
+  exception -- no retry at all in the actual module code.
+- **The ~584ms amortized-latency estimate from a single fast call was
+  wrong -- the real, batch-measured number is ~4,056ms/flow (~420x Tier
+  1), not ~60x.** A single isolated LLM call is not representative of
+  latency under any real load; see
+  [Latency](#latency-live-verified--and-a-reliability-problem) for both
+  numbers and why the gap is this large.
 - **No batching, no backpressure/retry wrapper on the explanation
   producer** -- see `explanation_producer.py`'s module docstring for why
   that's a documented scope reduction (the LLM call itself is the
