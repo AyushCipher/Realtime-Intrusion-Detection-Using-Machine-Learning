@@ -45,7 +45,8 @@ Kafka: network.ids.alerts          Tier2Reasoner                Kafka: network.i
 - `schema.py` -- the input (alert) and output (explanation) topic contracts.
 - `knowledge_base.py` -- a small, curated MITRE ATT&CK technique set covering this project's attack families.
 - `retrieval.py` -- TF-IDF retrieval over the knowledge base (the "R" in RAG).
-- `llm_client.py` -- `StubLLMClient` (deterministic, offline) and `AnthropicLLMClient` (real, untested live -- see [Known limitations](#known-limitations)).
+- `llm_client.py` -- `StubLLMClient` (deterministic, offline), `AnthropicLLMClient`, and `GeminiLLMClient` (both real, both live-verified -- see [LLM client: stub vs. real](#llm-client-stub-vs-real)).
+- `retry.py` -- `RetryingLLMClient`: retry/backoff and rate-limit-aware pacing, wrapping any `LLMClient`.
 - `reasoner.py` -- `Tier2Reasoner`: retrieval + prompt + LLM call + defensive response parsing.
 - `alert_consumer.py` / `explanation_producer.py` / `service.py` -- the live Kafka-facing pipeline.
 - `serve.py` -- CLI.
@@ -266,15 +267,15 @@ rather than treating as edge cases: a transient `503 UNAVAILABLE`
 ("model experiencing high demand"), a hard `429 RESOURCE_EXHAUSTED`
 after 5 requests/minute on the free tier (session 1), and unexplained
 `ClientError`/`ConnectError` failures that persisted through 4 retries
-with up to 200s of backoff each (session 2's batch). None of these are
-handled with retry/backoff anywhere in this module's actual code yet --
-`service.py`'s `process_alert` catches and logs any reasoner exception
-and moves on (skipping that alert), with no retry at all. The batch
-script used to collect the session-2 numbers above added its own
-ad-hoc retry loop (not part of this module); even that gave up after 4
-attempts on 2 of 6 alerts. Fine for a demo; a real deployment needs a
-real retry/backoff policy, and probably explicit rate-limit-aware
-request pacing, before this is trustworthy under any sustained load.
+with up to 200s of backoff each (session 2's batch). At the time both
+sessions were run, none of this was handled anywhere in the module's
+actual code -- the ad-hoc retry loop that gave up after 4 attempts on 2
+of 6 alerts lived in the throwaway batch script, not in `tier2_reasoner`
+itself. `retry.py`'s `RetryingLLMClient` (see [Known
+limitations](#known-limitations)) now exists specifically to close this
+gap, with `serve.py` wrapping real clients in it by default -- but it
+was built and unit-tested after these two sessions, not re-verified
+against the same live failure conditions yet.
 
 ## Serving
 
@@ -283,11 +284,15 @@ python -m ids_tier2.serve --bootstrap-servers localhost:9092 --llm gemini
 ```
 
 `--use-stub` runs against in-memory stubs instead of a real Kafka broker.
-`--llm stub` (the default) needs no API key; `--llm gemini` (live-verified,
-free tier, no payment method needed) and `--llm anthropic` (implemented,
-connectivity-verified, no successful completion yet -- needs a funded
-account) are the real options. `--no-rag` disables retrieval. `--top-k`
-controls how many techniques retrieval returns per alert (default 3).
+`--llm stub` (the default) needs no API key; `--llm gemini` (live-verified
+on the free tier, no payment method needed) and `--llm anthropic`
+(live-verified for connectivity, no successful completion observed yet --
+needs a funded account) are the real options. Both real clients are
+wrapped in `retry.RetryingLLMClient` by default (`--no-retry` disables
+this; `--max-retries`/`--base-backoff-s`/`--min-interval-s` tune it -- see
+[Known limitations](#known-limitations)). `--no-rag` disables retrieval.
+`--top-k` controls how many techniques retrieval returns per alert
+(default 3).
 
 ## Testing
 
@@ -296,10 +301,10 @@ pip install -r requirements.txt
 PYTHONPATH=src pytest
 ```
 
-54 tests, all passing, all against `StubLLMClient` (no network calls, no
-API key required, deterministic) -- separate from, and in addition to,
-the live Gemini calls described above under
-[Latency](#latency-live-verified) and the [RAG
+70 tests, all passing, all against `StubLLMClient` or a fake in-process
+client (no network calls, no API key required, deterministic) -- separate
+from, and in addition to, the live Gemini calls described above under
+[Latency](#latency-live-verified--and-a-reliability-problem) and the [RAG
 ablation](#--no-rag-the-rag-ablation-switch-informal-live-result), which
 were run manually and aren't part of the automated suite (no API key is
 available in CI).
@@ -321,14 +326,19 @@ available in CI).
   corpus**, and its category-to-technique mapping is this project's own
   reasonable association, not a verified ground truth -- see
   [Retrieval](#retrieval-why-tf-idf-not-embeddings).
-- **No retry/backoff for transient LLM failures, and this is a
-  confirmed real problem, not a hypothetical one.** A live `503`, a hard
-  `429` rate limit, and unexplained `ClientError`/`ConnectError` failures
-  that persisted through 4 manual retries with up to 200s backoff were
-  all observed live -- 2 of 6 RAG calls and all 6 no-RAG calls failed
-  outright in one real batch run. See [Latency](#latency-live-verified--and-a-reliability-problem).
-  `service.py` currently just logs and skips the alert on any reasoner
-  exception -- no retry at all in the actual module code.
+- **Retry/backoff now exists (`retry.py`'s `RetryingLLMClient`), built
+  directly from the confirmed real failures below -- but hasn't been
+  live-retested yet.** `serve.py` wraps real clients in it by default
+  (proactive pacing at a 12s/call default, matching the 5 requests/minute
+  free-tier limit observed live for Gemini, plus reactive retry that
+  parses the server's own suggested delay when available -- verified
+  against Gemini's real 429 response shape). `--no-retry` disables it;
+  `--max-retries`/`--base-backoff-s`/`--min-interval-s` tune it. 9 unit
+  tests (`test_tier2_retry.py`) cover the retry/backoff/pacing logic
+  against a fake client; it has not yet been run against the real batch
+  scenario that originally exposed the need for it (2/6 RAG + 6/6 no-RAG
+  failures -- see below), so whether it actually fixes that specific
+  failure pattern is still an open question, not a verified fix.
 - **The ~584ms amortized-latency estimate from a single fast call was
   wrong -- the real, batch-measured number is ~4,056ms/flow (~420x Tier
   1), not ~60x.** A single isolated LLM call is not representative of
