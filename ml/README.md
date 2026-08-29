@@ -415,17 +415,107 @@ Two things worth being precise about rather than just reporting the win:
 
 **What's still open:**
 
-- **No downstream tier consumes `escalated` traffic yet.** The router
-  produces the label; nothing currently does LLM/RAG reasoning or any
-  other second-tier analysis on it.
-- **No escalation-rate-vs-unknown-recall tradeoff curve or latency/
-  throughput harness yet.**
-- **PortScan and Heartbleed weren't in the 8 downloaded CSE-CIC-IDS2018
-  days** (they're on other days of that release, not fetched here) --
-  the real-data LOFO above covers 5 of the 7 families the synthetic run
-  covered, not all of them.
-- **Cross-dataset generalization** (e.g. train on CICIDS2018, test the
-  LOFO holdout against UNSW-NB15 or CIC-IoT2023) is untested.
+- **PortScan and Heartbleed don't exist in CSE-CIC-IDS2018's public
+  release at all -- corrected from an earlier, wrong version of this
+  README that said they were "on other days of that release, not
+  fetched here."** They're CICIDS2017-only categories. Verified two
+  ways: `CICIDS2018_ATTACK_CATEGORY_MAP` in `data.py` (built from the 8
+  downloaded, actually-inspected files) has no Heartbleed/PortScan key at
+  all, and every public description of the release's own attack
+  categories (7 scenarios: Brute-force, DoS, DDoS, Web attacks,
+  Infiltration, Botnet, and SQL Injection as its own bucket) omits both
+  as well. The dataset's original testbed-design writeup mentions
+  Heartbleed as planned, but it isn't in the labels the released CSVs
+  actually carry. The 2 CSE-CIC-IDS2018 days not yet downloaded here
+  (Tuesday-20-02, a DDoS variant, and Wednesday-28-02, a second
+  Infiltration day) wouldn't add either category if fetched -- the
+  real-data LOFO above covers 5 of the 7 families the *synthetic* run's
+  categories happen to share a name with, and the other 2 (PortScan,
+  Heartbleed) can only ever get real-data LOFO coverage from real
+  CICIDS2017 data, not more CICIDS2018 days. Getting that requires
+  downloading CICIDS2017's own release (a separate, smaller, older
+  dataset from the same lab) -- not done in this update; the correction
+  here is limited to not overclaiming a fix that downloading more
+  CICIDS2018 days can't actually provide.
+- **Cross-dataset generalization is untested, and it's a materially
+  bigger undertaking than "download UNSW-NB15 and point the existing
+  model at it" -- researched this update, not yet built.** UNSW-NB15's
+  public CSVs use a completely different, Argus-derived ~47-feature
+  schema (`dur`, `proto`, `service`, `state`, `sttl`, `dttl`, ...), not
+  CICFlowMeter's 78-84 columns this project's `CANONICAL_FEATURE_COLUMNS`
+  are built from -- a model trained on CICIDS2018 cannot simply score
+  UNSW-NB15 rows; only a handful of loosely-corresponding concepts
+  (duration, byte/packet counts) overlap at all, and not identically
+  computed. Doing this properly means one of:
+    1. **Use the NetFlow-standardized re-releases** -- NF-CSE-CIC-IDS2018-v2
+       and NF-UNSW-NB15-v2 (Sarhan, Layeghy & Portmann, "Towards a
+       Standard Feature Set for Network Intrusion Detection System
+       Datasets", arXiv:2101.11315; University of Queensland's NFV2
+       collection), which recompute *both* datasets onto one shared
+       NetFlow-derived feature set specifically so cross-dataset
+       comparisons are valid. This is the methodologically correct path,
+       but it means training a second, parallel model on this project's
+       own pipeline against the NF-* feature set (not reusing the
+       already-trained CICFlowMeter-based model directly) -- a real
+       feature-loader/mapper, a new attack-category mapping between the
+       two releases' label vocabularies, and a fresh stage1/stage2/gate
+       fit, before the LOFO-generalization comparison itself can even
+       run. The `split`/`openset_head`/`conformal_gate`/`evaluation`
+       machinery is feature-agnostic and would be reused as-is; only
+       `feature_cols` and a new data-loading module would be new.
+    2. **Or accept the weaker, easier claim**: reuse only the
+       *methodology* (LOFO protocol, OpenMax adaptation) on UNSW-NB15's
+       own native features, training a fresh model on UNSW-NB15 rather
+       than testing CICIDS2018's model on it -- doesn't answer "does this
+       trained model generalize," only "does this open-set method work on
+       a structurally different dataset," a real but smaller claim.
+  Access is also a genuine blocker, not just an inconvenience: the NF-*
+  releases' documented download links (UQ's `staff.itee.uq.edu.au/marius/
+  NIDS_datasets/` page, and `researchdata.edu.au`) resolve to a JavaScript
+  single-page app (UQ's Research Data Manager), not a direct file URL --
+  `curl`/`wget` get the SPA's HTML shell, not the CSV, so fetching this
+  needs either a browser session (to click through whatever license
+  gate the RDM UI presents) or the Kaggle mirrors (`dhoogla/nfunswnb15v2`
+  and equivalent), which need Kaggle API credentials this environment
+  doesn't have. Neither blocker is unsolvable, but both need a human
+  step (a browser click-through, or a Kaggle account) this repo can't
+  do unattended.
+
+(Superseded since the table above was first written: a downstream tier
+now does consume `escalated` traffic -- see `tier2_reasoner/README.md` --
+and both an OpenAUC metric and an escalation-budget sweep curve now exist,
+covered next.)
+
+### OpenAUC: a stricter open-set metric than plain AUROC
+
+`unknown_auroc` above only asks whether `unknown_mass` ranks unknown rows
+above known ones -- it says nothing about whether stage 2 got a known
+row's *class* right. `evaluation.open_auc` (Wang et al., NeurIPS 2022)
+is stricter: a known test row only counts as a positive comparison if the
+gate's predicted class matches its true label, and even then it only
+"beats" an unknown row if its own true-class probability exceeds that
+unknown row's highest known-class probability. `run_openset_trial` now
+computes both metrics for every (family, seed, gate) trial
+(`OpenSetTrialResult.open_auc`), so a plain `unknown_auroc`/`open_auc` gap
+in the existing result tables is directly visible without a separate
+run.
+
+### Escalation-budget sweep: recall/AUROC vs. budget, not just 0.1
+
+Every result above is reported at a single fixed budget (0.1). That one
+point can't show whether OpenMax's advantage holds across the operating
+range an analyst would actually pick from, or is specific to that budget.
+`evaluation.escalation_budget_sweep_trial`/`escalation_budget_sweep_report`
+sweep a list of budgets per LOFO fold, reusing the fold's already-fit
+stage 2 and already-fit gate across every budget in the sweep (only
+`conformal_gate.calibrate_threshold` -- a quantile over already-computed
+calibration scores -- actually depends on budget), so the sweep costs no
+more than the single-budget trial already did. `.groupby(["gate_name",
+"budget"])["unknown_recall"].mean()` on the report is the recall-vs-budget
+curve. Not yet run against the full real-data corpus in this README (the
+mechanism is built and tested; producing and reporting the actual curve
+against CSE-CIC-IDS2018 is follow-up work, same as the cross-dataset and
+extra-days items above).
 
 ## Adaptive conformal calibration under drift (H2)
 
@@ -515,16 +605,6 @@ scale than the tiny synthetic fixture's calibration set showed.
 
 **What's still open:**
 
-- **Live deployment needs a ground-truth proxy this experiment doesn't
-  need.** The evaluation above calls `AdaptiveConformalGate.update()` only
-  on rows *known* (by the labeled dataset) to be in-distribution -- valid
-  for testing the calibration mechanism itself, but a live `ScoringService`
-  doesn't have ground-truth labels for incoming flows in real time. Wiring
-  this into `pipeline.TwoStageDetector`'s live path requires deciding what
-  to call `update()` on when the true label isn't available yet (e.g.
-  updating on every scored flow under the assumption that the vast
-  majority of live traffic is in fact known/benign, similar to how stage
-  1's contamination assumption already works) -- not yet done or tested.
 - Not yet compared against `openset_head.OpenMaxHead`'s `unknown_mass` as
   the score being calibrated -- this run uses `softmax_gate.SoftmaxGate`
   throughout, to isolate the calibration mechanism from the open-set
@@ -534,6 +614,73 @@ scale than the tiny synthetic fixture's calibration set showed.
   `DRIFT_FACTOR`, there's no ground truth for how much the real
   distribution actually shifted, only that it's genuinely different
   traffic, captured on different days.
+
+### Production ground-truth-proxy design (flagged for operator sign-off)
+
+The gap above -- a live `ScoringService` has no ground-truth label for an
+incoming flow, but `AdaptiveConformalGate.update()`'s guarantee requires
+being called only on genuinely known/in-distribution traffic -- is now
+designed, implemented, and tested, **not** left as an open question. It's
+called out with its own heading rather than folded into "what's still
+open" because what shipped is a documented assumption an operator needs
+to consciously accept, not a neutral default.
+
+**The design**: `pipeline.TwoStageDetector.score`, when `escalation_gate`
+is an `AdaptiveConformalGate`, calls `update()` on *every* stage-1-
+flagged, stage-2-scored flow -- unconditionally, with no ground-truth
+filter. This rests on one explicit assumption: genuine novel/zero-day
+traffic is a small enough fraction of live scored flows that folding it
+into the "known" update stream biases `alpha_t` negligibly rather than
+corrupting it. That's supported by this project's own real-data results
+(real-world attack prevalence is consistently documented as <<1% of
+traffic throughout this README and the top-level one) and mirrors the
+standard compromise online conformal methods make when true per-sample
+labels aren't available at prediction time -- but it has never been
+checked against this project's own live traffic, and a deployment with
+unusually high novel-attack prevalence would silently violate it with no
+built-in self-correction. Full reasoning, including the failure mode's
+actual direction (it makes the gate *more* conservative under violation,
+not less -- see why): `adaptive_conformal_gate.py`'s module docstring,
+"Production ground-truth-proxy assumption" section.
+
+**What's built**:
+- `AdaptiveConformalGate.save`/`.load` (joblib, mirroring `ConformalGate`
+  and `OpenMaxHead`'s existing pattern) persist full online state --
+  `alpha_t`, the sliding window, and both history buffers -- so a
+  restarted serving process resumes adaptation instead of silently
+  resetting.
+- `AdaptiveConformalGate.realized_escalation_rate` -- a rolling monitoring
+  signal (fraction of the last `window_size` `update()` calls that
+  escalated), separate from `alpha_t`/`threshold` themselves.
+- `ids_ml.train --adaptive-escalation` (requires `--gate softmax` or
+  `--gate openset`; also `--adaptive-gamma`/`--adaptive-window-size`)
+  builds and seeds an `AdaptiveConformalGate` from the validation split
+  instead of a static one, and `ids_ml.serve` auto-detects and loads it
+  (`escalation_kind.txt` alongside the existing `gate_type.txt`), saving
+  updated state back on shutdown.
+- `evaluation.audit_gate_against_triage` -- the monitoring half. It
+  estimates how often the assumption was actually violated, from
+  analyst-triaged escalated alerts (`dashboard-api`'s existing
+  `triage_status` workflow): a `false_positive` triage is the assumption
+  behaving as expected (the flow genuinely was known); a `confirmed`
+  triage is the assumption being wrong for that flow. `confirmed_fraction`
+  among triaged escalations is the number an operator should watch, paired
+  with `triage_coverage` so a low-coverage number isn't mistaken for a
+  reliable one (the same paired-metric pattern `dashboard-api`'s own
+  false-positive-rate summary already uses). This can only audit "of what
+  we escalated, how much genuinely wasn't known" -- it has zero visibility
+  into a genuine novel attack that never got escalated at all, since
+  nothing outside the escalated set is ever triaged in this project's
+  workflow. That blind spot is inherent to the proxy, not a gap in the
+  audit function.
+
+**What's still a prototype, not a production default**: `--gate openset`
+alone (this repo's Docker demo default) still uses the static gate;
+`--adaptive-escalation` is opt-in and untested against this project's
+Docker demo path. Nothing here decides *for* an operator whether the
+base-rate assumption is acceptable for their deployment -- that sign-off
+is the point of documenting it this explicitly rather than defaulting it
+on silently.
 
 ## Optional: per-source-IP sequence model
 

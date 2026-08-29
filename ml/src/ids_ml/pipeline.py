@@ -27,6 +27,7 @@ from typing import Any, Dict, List, Optional
 
 import numpy as np
 
+from .adaptive_conformal_gate import AdaptiveConformalGate
 from .conformal_gate import ConformalGate
 from .stage1_iforest import AnomalyPreFilter
 from .stage2_xgboost import AttackClassifier
@@ -98,6 +99,16 @@ class TwoStageDetector:
     - Both: the full three-way router -- `escalated` when `unknown_mass`
       exceeds `escalation_gate.threshold`, else `known-benign`/
       `known-attack` from the gate's recalibrated prediction.
+
+    When `escalation_gate` is an `adaptive_conformal_gate.
+    AdaptiveConformalGate` rather than a static `conformal_gate.
+    ConformalGate`, every stage-1-flagged, stage-2-scored flow is fed to
+    its `update()` (not just read via `should_escalate()`), so the online
+    threshold keeps adapting from live traffic. This is the production
+    ground-truth-proxy this project adopts, not a neutral default -- see
+    `adaptive_conformal_gate.py`'s module docstring ("Production
+    ground-truth-proxy assumption") for exactly what it assumes and why
+    that assumption is flagged for operator sign-off, not just asserted.
     """
 
     def __init__(
@@ -145,7 +156,13 @@ class TwoStageDetector:
                     class_probs = gr.known_class_probabilities
                     unknown_mass = gr.unknown_mass
                     trigger = self.escalation_trigger_name
-                    if self.escalation_gate is not None and self.escalation_gate.should_escalate(unknown_mass):
+                    if isinstance(self.escalation_gate, AdaptiveConformalGate):
+                        # update() folds this flow into the online
+                        # adaptation as it decides -- the production
+                        # ground-truth-proxy described in this class's own
+                        # docstring, not merely a read.
+                        escalated = self.escalation_gate.update(unknown_mass)
+                    elif self.escalation_gate is not None and self.escalation_gate.should_escalate(unknown_mass):
                         escalated = True
 
                 decision = "escalated" if escalated else ("known-benign" if predicted_class == "BENIGN" else "known-attack")
