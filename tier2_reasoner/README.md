@@ -193,17 +193,81 @@ and 2 of the 6 RAG calls also failed even after retries -- see
 this is a real reliability finding, not just missing data, and why the
 no-RAG evidence above still stands at n=3, not n=9.
 
-This is still n=9 (RAG) / n=3 (no-RAG) alerts, not a rigorous ablation --
-no seeds, no significance test, no sample large enough to claim a
-statistically supported result, and now a real, observed reliability
-ceiling on how large a live batch can even complete. Turning this into
-H3 properly means running this same technique-ID-match comparison across
-many more escalated alerts (the mapping in `knowledge_base.py` makes
-"did it name the right technique" an automatable, countable outcome --
-no human evaluation required for this specific proxy metric) with a
-paired significance test, the same treatment H1/H2 got in `ml/` --
-and, per the finding below, budgeting for a much slower, retry-tolerant
-collection process than "just call it in a loop." Not yet built.
+### H3 result: the paired, statistically-powered ablation
+
+`scripts/run_h3_ablation.py` is that properly-built comparison:
+paired (RAG, no-RAG) trials per category, a single `RetryingLLMClient`
+shared across both conditions so `min_interval_s` pacing is enforced
+against the *combined* call rate (not double the intended rate from two
+independently-paced clients), the same correctness metric applied
+identically to both conditions (did `suspected_technique_id` match the
+category's true technique in `knowledge_base.py`), and an exact McNemar
+test (`scipy.stats.binomtest` on the discordant pairs -- appropriate for
+small paired-binary samples, not the chi-square approximation) on top.
+
+Run live against `gemini-3.6-flash`, 6 categories x 2 conditions x 3
+trials = 36 planned calls, `--min-interval-s 13` (under the free tier's
+5 requests/minute):
+
+| | completed | correct (of completed) |
+|---|---|---|
+| RAG | 10 / 18 | **10 / 10 (100%)** |
+| no-RAG | 10 / 18 | 0 / 10 (0%) |
+
+**Paired trials where both conditions completed: 9. McNemar exact test:
+b=9, c=0, p=0.0039 -- significant at p<0.01.** Every one of those 9
+paired trials is RAG correctly naming the technique and no-RAG correctly
+declining to guess one, with zero trials going the other way. This is a
+real, statistically supported result, not the anecdotal n=9/n=3 above --
+and it's *consistent* with that earlier informal finding (RAG:
+specific, correct attribution; no-RAG: correct abstention, never a wrong
+guess), not a contradiction of it.
+
+**The completion rate is the other half of this result, and it's
+worse than hoped, not better.** Only 20 of 36 calls (56%) completed at
+all. The failure pattern is informative, not random: the first 3
+categories processed (Botnet, Brute Force, DoS/DDoS) completed all 18 of
+their trials cleanly -- this is where the 9 paired trials above come
+from. Starting partway through the 4th category (Infiltration), nearly
+every subsequent call failed with `429 RESOURCE_EXHAUSTED`, and kept
+failing after the full retry/backoff sequence (up to 4 attempts,
+45-59s waits) -- unlike the earlier per-minute `429`s in this same run,
+which *did* recover after a single backoff wait (visible in the raw
+log: attempt 1 fails, backs off 45s, attempt 2 fails immediately,
+attempt 3 fails, backs off 59s -- then the *next trial*, after a
+`min_interval_s` gap, succeeds). That recovery pattern is what
+`RetryingLLMClient` is designed for and correctly handles. The
+late-batch failures didn't recover the same way even across tens of
+minutes and several retries, which is the signature of a **daily quota
+ceiling**, not the per-minute limit `min_interval_s` already accounts
+for -- a different failure mode retry/backoff cannot fix by construction
+(no amount of waiting *within a retry budget* helps if the quota resets
+on a clock the client doesn't know), and shouldn't try to paper over by
+retrying indefinitely. Two calls after the quota wall still slipped
+through (one `rag`/Infiltration, one `no_rag`/Web Attack) -- consistent
+with a rolling/partial quota rather than a hard stop, not with the
+retry logic doing anything wrong.
+
+**This is also the retry/backoff re-test flagged as outstanding**
+(`RetryingLLMClient` was built from the earlier batch-failure finding
+above but never re-run against real failure conditions until now): it
+behaved exactly as designed under both failure modes it actually hit --
+recovered from transient per-minute rate limiting via backoff, and
+correctly gave up (recording the failure, not hanging or crashing the
+batch) once retries were genuinely exhausted against a quota it can't
+wait past. Raw per-trial results (all 36, including every failure and
+its error message): this run's own output, not checked into the repo
+(regenerate with `python -m scripts.run_h3_ablation`).
+
+**What this changes and doesn't**: H3 now has a real paired significance
+result (p=0.0039), not just an anecdote -- a genuine strengthening of
+this project's evidence base. It does *not* mean Tier 2 is production-
+ready for volume: a 56% completion rate on a 36-call batch, on the same
+free-tier key this whole project has run against, means a real
+deployment scoring escalated alerts continuously would need either a
+paid tier with a materially higher quota, or explicit handling for
+"Tier 2 temporarily unavailable, retry later" at the volume this demo's
+own budget (10% escalation rate) would actually produce.
 
 ## Latency (live-verified -- and a reliability problem)
 
@@ -316,29 +380,35 @@ available in CI).
   error back (insufficient credit balance) -- the request/response
   wiring works, but this specific client's actual output has never been
   observed. `GeminiLLMClient` has: see [Latency](#latency-live-verified).
-- **The H3 RAG ablation has a real n=3 live result, not the statistically
-  powered comparison H1/H2 got.** See [the ablation
-  section](#--no-rag-the-rag-ablation-switch-informal-live-result) for
-  what was actually run and what a proper version needs -- the
-  technique-ID-match proxy metric described there is buildable now and
-  doesn't need human evaluation, just more live calls.
+- **The H3 RAG ablation now has a real paired result (p=0.0039, n=9
+  paired trials) -- but only a 56% call completion rate even with
+  retry/backoff**, consistent with a free-tier daily quota ceiling
+  retry/backoff can't fix by construction. See [the H3
+  result](#h3-result-the-paired-statistically-powered-ablation) for the
+  full breakdown, including which categories completed cleanly and which
+  hit the quota wall.
 - **The knowledge base is 7 curated entries, not the full ATT&CK
   corpus**, and its category-to-technique mapping is this project's own
   reasonable association, not a verified ground truth -- see
   [Retrieval](#retrieval-why-tf-idf-not-embeddings).
-- **Retry/backoff now exists (`retry.py`'s `RetryingLLMClient`), built
-  directly from the confirmed real failures below -- but hasn't been
-  live-retested yet.** `serve.py` wraps real clients in it by default
-  (proactive pacing at a 12s/call default, matching the 5 requests/minute
-  free-tier limit observed live for Gemini, plus reactive retry that
-  parses the server's own suggested delay when available -- verified
-  against Gemini's real 429 response shape). `--no-retry` disables it;
-  `--max-retries`/`--base-backoff-s`/`--min-interval-s` tune it. 9 unit
-  tests (`test_tier2_retry.py`) cover the retry/backoff/pacing logic
-  against a fake client; it has not yet been run against the real batch
-  scenario that originally exposed the need for it (2/6 RAG + 6/6 no-RAG
-  failures -- see below), so whether it actually fixes that specific
-  failure pattern is still an open question, not a verified fix.
+- **Retry/backoff (`retry.py`'s `RetryingLLMClient`) has now been
+  live-retested against a real batch, and the honest result is mixed.**
+  `serve.py` wraps real clients in it by default (proactive pacing at a
+  12s/call default, matching the 5 requests/minute free-tier limit
+  observed live for Gemini, plus reactive retry that parses the server's
+  own suggested delay when available). 9 unit tests
+  (`test_tier2_retry.py`) cover the logic against a fake client; the H3
+  batch run (36 real calls) is the real-condition re-test. It recovered
+  correctly from transient per-minute rate-limit `429`s (backs off, next
+  call succeeds), which is what it was built for -- but 16 of 36 calls
+  still failed outright once a daily quota ceiling was hit partway
+  through the batch, since no amount of backoff *within a retry budget*
+  helps against a limit that only resets on its own clock. Retry/backoff
+  is confirmed to fix the failure mode it targets; it was never going to
+  fix this different one, and now that's demonstrated rather than
+  assumed. See [the H3
+  result](#h3-result-the-paired-statistically-powered-ablation) for the
+  full breakdown.
 - **The ~584ms amortized-latency estimate from a single fast call was
   wrong -- the real, batch-measured number is ~4,056ms/flow (~420x Tier
   1), not ~60x.** A single isolated LLM call is not representative of

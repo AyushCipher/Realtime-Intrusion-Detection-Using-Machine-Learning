@@ -2,6 +2,7 @@ from pathlib import Path
 
 import pytest
 
+from ids_ml.adaptive_conformal_gate import AdaptiveConformalGate
 from ids_ml.conformal_gate import ConformalGate, calibrate_threshold
 from ids_ml.data import load_and_map
 from ids_ml.features import CANONICAL_FEATURE_COLUMNS
@@ -162,6 +163,40 @@ def test_two_stage_detector_with_gate_and_escalation_gate_routes_three_ways():
         if r.escalated:
             assert r.decision == "escalated"
             assert r.unknown_mass > escalation_gate.threshold
+
+
+def test_two_stage_detector_with_adaptive_escalation_gate_updates_online():
+    # The production ground-truth-proxy design (adaptive_conformal_gate.py's
+    # module docstring): every stage-1-flagged, stage-2-scored flow must be
+    # fed to the adaptive gate's update() during score(), not merely read
+    # via should_escalate() -- otherwise the "online" gate would sit frozen
+    # at its seeded state in production, defeating its whole purpose.
+    df = load_and_map(FIXTURE_PATH)
+    train, calib, test = time_based_split(df, train_frac=0.5, val_frac=0.25)
+    X_train = train[CANONICAL_FEATURE_COLUMNS].to_numpy()
+
+    stage1 = AnomalyPreFilter(Stage1Config(n_estimators=100, contamination=0.35, random_state=0)).fit(X_train)
+    stage2 = _fit_stage2(train)
+    gate = SoftmaxGate(stage2)
+
+    X_calib_flagged = calib[CANONICAL_FEATURE_COLUMNS].to_numpy()[stage1.flag(calib[CANONICAL_FEATURE_COLUMNS].to_numpy())]
+    calib_scores = [r.unknown_mass for r in gate.recalibrate_batch(X_calib_flagged)] if len(X_calib_flagged) else [0.5]
+    escalation_gate = AdaptiveConformalGate(budget=0.3, gamma=0.05).seed(calib_scores)
+    alpha_before = escalation_gate.alpha_t
+    assert escalation_gate.alpha_history == []
+
+    detector = TwoStageDetector(stage1, stage2, gate=gate, escalation_gate=escalation_gate, escalation_trigger_name="softmax")
+    results = detector.score(test[CANONICAL_FEATURE_COLUMNS].to_numpy())
+
+    n_flagged = sum(1 for r in results if r.stage1_flagged)
+    assert n_flagged > 0
+    # update() was called once per flagged row -- alpha_t moved and the
+    # gate's own bookkeeping grew by exactly that many entries.
+    assert len(escalation_gate.alpha_history) == n_flagged
+    assert escalation_gate.alpha_t != alpha_before or n_flagged == 0
+    for r in results:
+        if r.escalated:
+            assert r.decision == "escalated"
 
 
 # --- Save/load round trips (needed to persist a fitted gate between

@@ -1,3 +1,5 @@
+import sqlite3
+
 import pytest
 
 from ids_dashboard.store import AlertStore
@@ -244,6 +246,68 @@ def test_list_and_count_alerts_filter_by_escalated():
     assert store.count_alerts(escalated=False) == 1
 
     assert store.count_alerts() == 3  # escalated=None (default): no filter
+
+
+def test_opening_a_pre_tier2_database_migrates_the_alerts_table(tmp_path):
+    # Reproduces a real bug found integrating against a stale docker-compose
+    # volume: a database file created before Tier 2 (unknown_mass/escalated/
+    # escalation_trigger, and the whole explanations table) existed used to
+    # crash AlertStore.__init__ with "no such column: escalated", because
+    # CREATE TABLE IF NOT EXISTS is a no-op against an existing table and the
+    # idx_alerts_escalated index creation then failed against it.
+    db_path = tmp_path / "legacy_alerts.db"
+    legacy_conn = sqlite3.connect(str(db_path))
+    legacy_conn.executescript(
+        """
+        CREATE TABLE alerts (
+            alert_id TEXT PRIMARY KEY,
+            flow_id TEXT NOT NULL,
+            src_ip TEXT NOT NULL,
+            src_port INTEGER NOT NULL,
+            dst_ip TEXT NOT NULL,
+            dst_port INTEGER NOT NULL,
+            protocol INTEGER NOT NULL,
+            flow_start_time REAL NOT NULL,
+            scored_at REAL NOT NULL,
+            stage1_anomaly_score REAL NOT NULL,
+            stage1_flagged INTEGER NOT NULL,
+            stage2_predicted_class TEXT NOT NULL,
+            stage2_confidence REAL NOT NULL,
+            stage2_class_probabilities TEXT NOT NULL,
+            severity TEXT NOT NULL,
+            explanation TEXT NOT NULL,
+            model_version TEXT NOT NULL,
+            schema_version INTEGER NOT NULL,
+            received_at REAL NOT NULL,
+            triage_status TEXT NOT NULL DEFAULT 'new',
+            triage_note TEXT,
+            triage_updated_at REAL
+        );
+        """
+    )
+    legacy_conn.execute(
+        """
+        INSERT INTO alerts (
+            alert_id, flow_id, src_ip, src_port, dst_ip, dst_port, protocol,
+            flow_start_time, scored_at, stage1_anomaly_score, stage1_flagged,
+            stage2_predicted_class, stage2_confidence, stage2_class_probabilities,
+            severity, explanation, model_version, schema_version, received_at
+        ) VALUES ('pre-existing', 'flow-1', '10.0.0.1', 1234, '10.0.0.2', 443, 6,
+            1.0, 2.0, 0.9, 1, 'DoS/DDoS', 0.95, '{}', 'high', '[]', 'v1', 1, 3.0)
+        """
+    )
+    legacy_conn.commit()
+    legacy_conn.close()
+
+    store = AlertStore(str(db_path))  # must not raise
+
+    pre_existing = store.get_alert("pre-existing")
+    assert pre_existing["unknown_mass"] == 0.0
+    assert pre_existing["escalated"] is False
+    assert pre_existing["escalation_trigger"] == ""
+
+    store.insert_alert(_make_alert("new-alert", unknown_mass=0.7, escalated=True, escalation_trigger="openset"))
+    assert store.count_alerts(escalated=True) == 1
 
 
 # --- Tier 2 explanations ---------------------------------------------------

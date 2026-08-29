@@ -7,9 +7,13 @@ import pytest
 from ids_ml.data import load_and_map
 from ids_ml.evaluation import (
     adversarial_robustness_report,
+    audit_gate_against_triage,
     concept_drift_report,
+    escalation_budget_sweep_report,
+    escalation_budget_sweep_trial,
     expected_calibration_error,
     leakage_comparison_report,
+    open_auc,
     openset_vs_softmax_report,
     openset_vs_softmax_significance,
     per_category_report,
@@ -129,6 +133,43 @@ def test_expected_calibration_error_returns_nan_for_empty_input():
     assert np.isnan(expected_calibration_error([], []))
 
 
+def test_open_auc_perfect_separation_scores_one():
+    known_true_labels = ["A", "B"]
+    known_class_probabilities = [{"A": 0.9, "B": 0.1}, {"A": 0.2, "B": 0.8}]
+    unknown_class_probabilities = [{"A": 0.3, "B": 0.4}, {"A": 0.2, "B": 0.1}]
+    assert open_auc(known_true_labels, known_class_probabilities, unknown_class_probabilities) == pytest.approx(1.0)
+
+
+def test_open_auc_excludes_misclassified_known_rows():
+    # Row 2's argmax is "A" (0.6) but its true label is "B" -- misclassified,
+    # so it must not contribute a comparison even though its own P(B)=0.4
+    # would have beaten the unknown row's 0.2 if it had been included.
+    known_true_labels = ["A", "B"]
+    known_class_probabilities = [{"A": 0.9, "B": 0.1}, {"A": 0.6, "B": 0.4}]
+    unknown_class_probabilities = [{"A": 0.2, "B": 0.1}]
+    assert open_auc(known_true_labels, known_class_probabilities, unknown_class_probabilities) == pytest.approx(1.0)
+
+
+def test_open_auc_ties_do_not_count_as_wins():
+    known_true_labels = ["A"]
+    known_class_probabilities = [{"A": 0.5, "B": 0.5}]
+    unknown_class_probabilities = [{"A": 0.5, "B": 0.1}]
+    assert open_auc(known_true_labels, known_class_probabilities, unknown_class_probabilities) == pytest.approx(0.0)
+
+
+def test_open_auc_nan_when_no_known_row_is_correctly_classified():
+    known_true_labels = ["A"]
+    known_class_probabilities = [{"A": 0.3, "B": 0.7}]  # argmax is B, true is A
+    unknown_class_probabilities = [{"A": 0.1, "B": 0.1}]
+    assert np.isnan(open_auc(known_true_labels, known_class_probabilities, unknown_class_probabilities))
+
+
+def test_open_auc_nan_when_no_unknown_rows():
+    known_true_labels = ["A"]
+    known_class_probabilities = [{"A": 0.9, "B": 0.1}]
+    assert np.isnan(open_auc(known_true_labels, known_class_probabilities, []))
+
+
 def test_run_openset_trial_returns_both_gates_with_valid_ranges():
     df = load_and_map(FIXTURE_PATH)
     results = run_openset_trial(
@@ -139,7 +180,14 @@ def test_run_openset_trial_returns_both_gates_with_valid_ranges():
     for r in results:
         assert r.family == "Botnet"
         assert r.n_unknown_test > 0
-        for value in (r.escalation_rate_on_known, r.unknown_recall, r.unknown_auroc, r.ece, r.brier):
+        for value in (
+            r.escalation_rate_on_known,
+            r.unknown_recall,
+            r.unknown_auroc,
+            r.open_auc,
+            r.ece,
+            r.brier,
+        ):
             assert np.isnan(value) or 0.0 <= value <= 1.0
 
 
@@ -187,6 +235,60 @@ def test_openset_vs_softmax_significance_handles_too_few_pairs():
     result = openset_vs_softmax_significance(tiny_report, metric="unknown_recall")
     assert result["n_pairs"] < 2
     assert np.isnan(result["p_value"])
+
+
+# --- Escalation-budget sweep ------------------------------------------------
+
+
+def test_escalation_budget_sweep_trial_one_row_per_gate_and_budget():
+    df = load_and_map(FIXTURE_PATH)
+    budgets = [0.1, 0.2, 0.3]
+    rows = escalation_budget_sweep_trial(
+        df, "Botnet", CANONICAL_FEATURE_COLUMNS, budgets=budgets, seed=0, stage2_n_estimators=_FAST_N_ESTIMATORS
+    )
+
+    assert len(rows) == len(budgets) * 2
+    assert {r["gate_name"] for r in rows} == {"softmax", "openset"}
+    assert {r["budget"] for r in rows} == set(budgets)
+    for r in rows:
+        for value in (r["escalation_rate_on_known"], r["unknown_recall"]):
+            assert np.isnan(value) or 0.0 <= value <= 1.0
+
+
+def test_escalation_budget_sweep_trial_recall_is_monotonically_non_decreasing_in_budget():
+    # A looser budget calibrates a lower unknown_mass threshold (escalate
+    # more readily), so unknown_recall can only go up (or stay flat) as
+    # budget increases -- a real invariant of split-conformal calibration,
+    # not just a property of this fixture.
+    df = load_and_map(FIXTURE_PATH)
+    budgets = [0.05, 0.15, 0.3, 0.5]
+    rows = escalation_budget_sweep_trial(
+        df, "PortScan", CANONICAL_FEATURE_COLUMNS, budgets=budgets, seed=0, stage2_n_estimators=_FAST_N_ESTIMATORS
+    )
+    for gate_name in ("softmax", "openset"):
+        recalls = [r["unknown_recall"] for r in rows if r["gate_name"] == gate_name]
+        clean = [v for v in recalls if not np.isnan(v)]
+        assert all(b >= a - 1e-9 for a, b in zip(clean, clean[1:]))
+
+
+def test_escalation_budget_sweep_report_has_one_row_per_family_seed_gate_budget():
+    df = load_and_map(FIXTURE_PATH)
+    families = ["Botnet", "PortScan"]
+    seeds = [0, 1]
+    budgets = [0.1, 0.2]
+    report = escalation_budget_sweep_report(
+        df,
+        CANONICAL_FEATURE_COLUMNS,
+        families=families,
+        seeds=seeds,
+        budgets=budgets,
+        stage2_n_estimators=_FAST_N_ESTIMATORS,
+    )
+
+    assert len(report) == len(families) * len(seeds) * len(budgets) * 2
+    assert set(report["family"]) == set(families)
+    assert set(report["budget"]) == set(budgets)
+    assert set(report["gate_name"]) == {"softmax", "openset"}
 
 
 # --- Static vs. adaptive conformal calibration under drift -----------------
@@ -308,3 +410,40 @@ def test_amortized_latency_adds_full_tier2_cost_when_escalation_rate_is_one():
 
 def test_amortized_latency_scales_linearly_with_escalation_rate():
     assert amortized_latency_ms(tier1_median_ms=2.0, escalation_rate=0.1, tier2_latency_ms=1000.0) == pytest.approx(102.0)
+
+
+# --- Auditing AdaptiveConformalGate's production ground-truth-proxy -------
+
+
+def test_audit_gate_against_triage_basic_counts():
+    records = [
+        {"escalated": True, "triage_status": "false_positive"},
+        {"escalated": True, "triage_status": "false_positive"},
+        {"escalated": True, "triage_status": "confirmed"},
+        {"escalated": True, "triage_status": "new"},  # not yet triaged -- excluded from confirmed_fraction
+        {"escalated": False, "triage_status": "new"},  # never escalated -- not triage-eligible in this workflow
+    ]
+    result = audit_gate_against_triage(records)
+
+    assert result["n_escalated"] == 4
+    assert result["n_escalated_triaged"] == 3
+    assert result["n_confirmed"] == 1
+    assert result["n_false_positive"] == 2
+    assert result["triage_coverage"] == pytest.approx(3 / 4)
+    assert result["confirmed_fraction"] == pytest.approx(1 / 3)
+
+
+def test_audit_gate_against_triage_nan_when_nothing_escalated():
+    records = [{"escalated": False, "triage_status": "new"}]
+    result = audit_gate_against_triage(records)
+    assert result["n_escalated"] == 0
+    assert np.isnan(result["triage_coverage"])
+    assert np.isnan(result["confirmed_fraction"])
+
+
+def test_audit_gate_against_triage_nan_confirmed_fraction_when_nothing_triaged_yet():
+    records = [{"escalated": True, "triage_status": "acknowledged"}]
+    result = audit_gate_against_triage(records)
+    assert result["n_escalated"] == 1
+    assert result["triage_coverage"] == pytest.approx(0.0)
+    assert np.isnan(result["confirmed_fraction"])

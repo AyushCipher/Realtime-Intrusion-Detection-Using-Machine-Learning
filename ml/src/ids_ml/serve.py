@@ -22,6 +22,7 @@ import logging
 import sys
 from pathlib import Path
 
+from .adaptive_conformal_gate import AdaptiveConformalGate
 from .alert_producer import BufferedAlertProducer, KafkaAlertProducer, StubAlertProducer
 from .conformal_gate import ConformalGate
 from .explainability import ShapExplainer
@@ -33,7 +34,7 @@ from .scoring_service import ScoringService, ScoringServiceConfig
 from .softmax_gate import SoftmaxGate
 from .stage1_iforest import AnomalyPreFilter
 from .stage2_xgboost import AttackClassifier
-from .train import ESCALATION_GATE_FILENAME, GATE_TYPE_FILENAME, OPENSET_GATE_FILENAME
+from .train import ESCALATION_GATE_FILENAME, ESCALATION_KIND_FILENAME, GATE_TYPE_FILENAME, OPENSET_GATE_FILENAME
 
 logger = logging.getLogger("ids_ml.serve")
 
@@ -54,7 +55,23 @@ def load_gate(model_dir: Path, stage2: AttackClassifier):
     else:
         raise ValueError(f"unknown gate type in {gate_type_path}: {gate_type!r}")
 
-    escalation_gate = ConformalGate.load(model_dir / ESCALATION_GATE_FILENAME)
+    # Absent escalation_kind.txt means a model saved before this file
+    # existed -- those only ever wrote a static gate.
+    kind_path = model_dir / ESCALATION_KIND_FILENAME
+    escalation_kind = kind_path.read_text().strip() if kind_path.exists() else "static"
+    if escalation_kind == "adaptive":
+        escalation_gate = AdaptiveConformalGate.load(model_dir / ESCALATION_GATE_FILENAME)
+        logger.info(
+            "Loaded adaptive escalation gate: alpha_t=%.4f, realized_escalation_rate=%s -- see "
+            "adaptive_conformal_gate.py's module docstring for the production ground-truth-proxy "
+            "assumption this online-updating gate runs under",
+            escalation_gate.alpha_t,
+            escalation_gate.realized_escalation_rate,
+        )
+    elif escalation_kind == "static":
+        escalation_gate = ConformalGate.load(model_dir / ESCALATION_GATE_FILENAME)
+    else:
+        raise ValueError(f"unknown escalation kind in {kind_path}: {escalation_kind!r}")
     return gate, escalation_gate, gate_type
 
 
@@ -121,6 +138,17 @@ def main(argv=None) -> int:
         logger.info("Interrupted; shutting down")
         source.close()
         producer.close()
+
+    if isinstance(escalation_gate, AdaptiveConformalGate):
+        # Persist online state (alpha_t, sliding window, history) so a
+        # restart resumes adaptation instead of silently resetting to
+        # alpha_t=budget -- see AdaptiveConformalGate.save's docstring.
+        escalation_gate.save(model_dir / ESCALATION_GATE_FILENAME)
+        logger.info(
+            "Saved adaptive escalation gate state: alpha_t=%.4f, realized_escalation_rate=%s",
+            escalation_gate.alpha_t,
+            escalation_gate.realized_escalation_rate,
+        )
 
     logger.info("Processed %d flows, published %d alerts", service.processed, service.alerts_published)
     return 0

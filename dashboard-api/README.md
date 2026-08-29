@@ -110,7 +110,7 @@ pip install -r requirements-dashboard.txt
 PYTHONPATH=src pytest
 ```
 
-55 tests, backend only. Uses `fastapi.testclient.TestClient` with injected
+56 tests, backend only. Uses `fastapi.testclient.TestClient` with injected
 stub alert *and* explanation sources and an in-memory SQLite database --
 no live Kafka broker needed, matching the pattern used throughout this
 project. The frontend has no automated test suite; `npm run build` (`tsc
@@ -158,16 +158,37 @@ limitations](#known-limitations).
   intentional, to avoid persisting a shared Basic-auth password in browser
   storage, but worth knowing if a smoother reload experience is wanted
   later (that would need a proper session/token mechanism, not Basic auth).
-- **The new escalation/explanation UI has not been checked in a real
-  browser against a live backend.** `npm run build` (TypeScript + Vite)
-  passes cleanly, and the 55 backend tests cover the REST/WebSocket
-  contract those components call, but no one has actually clicked through
-  the live feed, opened an escalated alert, and watched a Tier 2
-  explanation arrive -- the Docker daemon was not running in the
-  environment this was built in, so `docker compose up` (needed for a
-  real end-to-end browser check against live Kafka/ml/tier2_reasoner
-  services) was not possible. Do this yourself before trusting the UI
-  behaves as described.
+- **The escalation/explanation UI has now been checked in a real browser
+  against the live stack -- and doing so found a real crash bug `npm run
+  build` and the 56 backend tests couldn't have caught.** A headless-
+  browser session against a running `docker compose up -d` stack logged
+  in, opened the live feed, opened Triage, and clicked into an escalated
+  alert to confirm the explainability panel (SHAP feature bars, class
+  probabilities) and the Tier 2 analysis section both render real data.
+  Along the way it hit `Cannot read properties of undefined (reading
+  'replace')`, a hard crash: `AlertRow.tsx` called
+  `alert.triage_status.replace(...)` unconditionally, but a `triage_status`
+  field is a store/DB-only concept `ml`'s Kafka alert schema never
+  includes -- a REST-fetched alert always has it, but a *live*
+  WebSocket-pushed alert (broadcast as `ingest_service.py` received it
+  from Kafka, before the DB round-trip that adds the default) never does.
+  Every automated test uses fixture data with `triage_status` already
+  present, so nothing caught this until an actual live alert was pushed
+  to an actual open browser tab. Fixed by defaulting a missing
+  `triage_status` to `"new"` at render time (true by construction -- a
+  freshly-pushed alert has never been triaged) and correcting `types.ts`'s
+  `Alert` interface to mark `triage_status`/`triage_note`/
+  `triage_updated_at` as the optional fields they actually are on the live
+  path, not falsely required.
+- **A real integration bug was found and fixed via this store**: a stale
+  `dashboard_data` Docker volume from before Tier 2 existed crashed
+  `AlertStore.__init__` with `sqlite3.OperationalError: no such column:
+  escalated`, because `CREATE TABLE IF NOT EXISTS` is a no-op against an
+  already-existing `alerts` table. `store.py` now migrates missing columns
+  (`PRAGMA table_info` + `ALTER TABLE ... ADD COLUMN`) before creating any
+  index that references them -- see the top-level README's "What
+  integration found" section and
+  `test_dash_store.py::test_opening_a_pre_tier2_database_migrates_the_alerts_table`.
 - **`ExplanationIngestService` assumes Kafka delivery order between
   `network.ids.alerts` and `network.ids.explanations` is not guaranteed**
   (see `store.insert_explanation`'s docstring) and is written to tolerate

@@ -220,6 +220,7 @@ class OpenSetTrialResult:
     escalation_rate_on_known: float  # should track `budget` on the calibration set by construction; this is its out-of-sample analogue on the test split's known rows
     unknown_recall: float  # fraction of held-out-family test rows escalated
     unknown_auroc: float  # unknown_mass as a score distinguishing known vs held-out-family test rows
+    open_auc: float  # stricter joint correct-classification + confidence-ranking metric -- see open_auc()
     ece: float
     brier: float
 
@@ -256,6 +257,50 @@ def expected_calibration_error(y_true: Sequence[int], y_score: Sequence[float], 
         bin_accuracy = y_true[in_bin].mean()
         ece += (in_bin.sum() / n) * abs(bin_confidence - bin_accuracy)
     return float(ece)
+
+
+def open_auc(
+    known_true_labels: Sequence[str],
+    known_class_probabilities: Sequence[Dict[str, float]],
+    unknown_class_probabilities: Sequence[Dict[str, float]],
+) -> float:
+    """OpenAUC (Wang et al., NeurIPS 2022): a stricter open-set metric than
+    `unknown_auroc` (plain AUROC of `unknown_mass` separating known vs.
+    unknown rows). Plain AUROC only asks whether the novelty score ranks
+    unknown rows above known rows -- it says nothing about whether stage 2
+    actually got the known rows' *class* right. OpenAUC jointly requires
+    both: a known test row only counts as a positive comparison if the
+    gate's predicted class matches its true label, and even then it's only
+    "beaten" an unknown row if its true-class probability exceeds that
+    unknown row's highest known-class probability.
+
+    OpenAUC = (1 / (|correct known| * |unknown|)) * sum over every
+    (correct known i, unknown j) pair of 1[ p_i(y_i) > max_k p_j(k) ]
+
+    where p_i(y_i) is known row i's probability on its own true class, and
+    max_k p_j(k) is unknown row j's highest probability over known classes.
+    A misclassified known row contributes zero comparisons -- it can never
+    help this score, mirroring the paper's intent that a model shouldn't
+    get open-set credit for a closed-set mistake. Returns nan if there are
+    no correctly-classified known rows or no unknown rows to compare
+    against (open-set recognition is undefined without both).
+    """
+    correct_known_scores = [
+        probs[true_label]
+        for true_label, probs in zip(known_true_labels, known_class_probabilities)
+        if max(probs, key=probs.get) == true_label
+    ]
+    unknown_max_scores = [max(probs.values()) if probs else 0.0 for probs in unknown_class_probabilities]
+
+    if not correct_known_scores or not unknown_max_scores:
+        return float("nan")
+
+    correct_known_scores = np.asarray(correct_known_scores)
+    unknown_max_scores = np.asarray(unknown_max_scores)
+    # Broadcast compare every (known, unknown) pair at once rather than a
+    # nested Python loop -- fine at this project's evaluation-set sizes.
+    wins = (correct_known_scores[:, None] > unknown_max_scores[None, :]).sum()
+    return float(wins / (len(correct_known_scores) * len(unknown_max_scores)))
 
 
 def run_openset_trial(
@@ -304,11 +349,15 @@ def run_openset_trial(
         calib_scores = [r.unknown_mass for r in gate.recalibrate_batch(X_calib)] if len(X_calib) else []
         conformal = calibrate_threshold(calib_scores, budget=budget) if calib_scores else None
 
-        known_um = np.array(
-            [r.unknown_mass for r in gate.recalibrate_batch(X_known_test)] if len(X_known_test) else []
-        )
-        unknown_um = np.array(
-            [r.unknown_mass for r in gate.recalibrate_batch(X_unknown_test)] if len(X_unknown_test) else []
+        known_gate_results = gate.recalibrate_batch(X_known_test) if len(X_known_test) else []
+        unknown_gate_results = gate.recalibrate_batch(X_unknown_test) if len(X_unknown_test) else []
+        known_um = np.array([r.unknown_mass for r in known_gate_results])
+        unknown_um = np.array([r.unknown_mass for r in unknown_gate_results])
+
+        oauc = open_auc(
+            known_test[label_col].tolist(),
+            [r.known_class_probabilities for r in known_gate_results],
+            [r.known_class_probabilities for r in unknown_gate_results],
         )
 
         if conformal is not None and len(known_um):
@@ -340,6 +389,7 @@ def run_openset_trial(
                 escalation_rate_on_known=escalation_rate_on_known,
                 unknown_recall=unknown_recall,
                 unknown_auroc=auroc,
+                open_auc=oauc,
                 ece=ece,
                 brier=brier,
             )
@@ -431,6 +481,129 @@ def openset_vs_softmax_significance(report_df: pd.DataFrame, metric: str = "unkn
         "softmax_std": float(pivot["softmax"].std()),
         "note": note,
     }
+
+
+# --- Escalation-budget sweep: recall/AUROC vs. budget, not just budget=0.1 -
+#
+# H1 above (and this project's demo model) reports both gates at a single
+# fixed budget (0.1). That one point can't show whether OpenMax's advantage
+# holds across the operating range an analyst would actually choose from,
+# or is an artifact of that particular budget. `escalation_budget_sweep_trial`
+# reuses one LOFO fold's already-fit stage 2 and already-fit gate across
+# every budget in the sweep -- only `conformal_gate.calibrate_threshold`
+# (a quantile over already-computed calibration scores) depends on budget,
+# so sweeping it costs nothing beyond the single-budget trial's fit cost.
+
+
+def escalation_budget_sweep_trial(
+    df: pd.DataFrame,
+    family: str,
+    feature_cols: List[str],
+    budgets: Sequence[float] = (0.01, 0.05, 0.1, 0.2, 0.3, 0.5),
+    seed: int = 0,
+    fit_frac: float = 0.75,
+    label_col: str = "attack_category",
+    timestamp_col: str = "timestamp",
+    train_frac: float = 0.7,
+    stage2_n_estimators: int = 300,
+) -> List[Dict[str, object]]:
+    """One leave-one-family-out fold at one seed, both gates, swept across
+    every budget in `budgets`. One dict per (gate, budget); see the module-
+    level comment above for why stage 2 and the gate are each fit only
+    once, not once per budget.
+    """
+    train, test = leave_one_family_out(
+        df, family, label_col=label_col, timestamp_col=timestamp_col, train_frac=train_frac
+    )
+    fit_df, calib_df = random_holdout(train, holdout_frac=1.0 - fit_frac, random_state=seed)
+
+    X_fit = fit_df[feature_cols].to_numpy()
+    y_fit = fit_df[label_col].tolist()
+    stage2 = AttackClassifier(Stage2Config(n_estimators=stage2_n_estimators, random_state=seed)).fit(X_fit, y_fit)
+
+    X_calib = calib_df[feature_cols].to_numpy()
+    known_test = test[test[label_col] != family]
+    unknown_test = test[test[label_col] == family]
+    X_known_test = known_test[feature_cols].to_numpy()
+    X_unknown_test = unknown_test[feature_cols].to_numpy()
+
+    rows: List[Dict[str, object]] = []
+    for gate_name in _GATE_NAMES:
+        gate = _fit_gate(gate_name, stage2, X_fit, y_fit)
+
+        calib_scores = [r.unknown_mass for r in gate.recalibrate_batch(X_calib)] if len(X_calib) else []
+        known_um = np.array(
+            [r.unknown_mass for r in gate.recalibrate_batch(X_known_test)] if len(X_known_test) else []
+        )
+        unknown_um = np.array(
+            [r.unknown_mass for r in gate.recalibrate_batch(X_unknown_test)] if len(X_unknown_test) else []
+        )
+
+        for budget in budgets:
+            conformal = calibrate_threshold(calib_scores, budget=budget) if calib_scores else None
+            if conformal is not None and len(known_um):
+                escalation_rate_on_known = float(np.mean([conformal.should_escalate(s) for s in known_um]))
+            else:
+                escalation_rate_on_known = float("nan")
+            if conformal is not None and len(unknown_um):
+                unknown_recall = float(np.mean([conformal.should_escalate(s) for s in unknown_um]))
+            else:
+                unknown_recall = float("nan")
+
+            rows.append(
+                {
+                    "family": family,
+                    "seed": seed,
+                    "gate_name": gate_name,
+                    "budget": budget,
+                    "n_known_calib": len(calib_scores),
+                    "n_known_test": len(known_um),
+                    "n_unknown_test": len(unknown_um),
+                    "escalation_rate_on_known": escalation_rate_on_known,
+                    "unknown_recall": unknown_recall,
+                }
+            )
+    return rows
+
+
+def escalation_budget_sweep_report(
+    df: pd.DataFrame,
+    feature_cols: List[str],
+    families: Optional[Sequence[str]] = None,
+    seeds: Sequence[int] = (0, 1, 2, 3, 4),
+    budgets: Sequence[float] = (0.01, 0.05, 0.1, 0.2, 0.3, 0.5),
+    fit_frac: float = 0.75,
+    label_col: str = "attack_category",
+    timestamp_col: str = "timestamp",
+    train_frac: float = 0.7,
+    stage2_n_estimators: int = 300,
+) -> pd.DataFrame:
+    """Runs `escalation_budget_sweep_trial` for every (family, seed) pair,
+    both gates, every budget. One row per (family, seed, gate, budget);
+    `.groupby(["gate_name", "budget"])["unknown_recall"].mean()` on the
+    result is the recall-vs-budget curve -- the tradeoff `ml/README.md`'s
+    open-set section has flagged as missing (only budget=0.1 was reported).
+    """
+    if families is None:
+        families = sorted(f for f in df[label_col].unique() if f != "BENIGN")
+    rows: List[Dict[str, object]] = []
+    for family in families:
+        for seed in seeds:
+            rows.extend(
+                escalation_budget_sweep_trial(
+                    df,
+                    family,
+                    feature_cols,
+                    budgets=budgets,
+                    seed=seed,
+                    fit_frac=fit_frac,
+                    label_col=label_col,
+                    timestamp_col=timestamp_col,
+                    train_frac=train_frac,
+                    stage2_n_estimators=stage2_n_estimators,
+                )
+            )
+    return pd.DataFrame(rows)
 
 
 # --- Static vs. adaptive conformal calibration under concept drift --------
@@ -603,6 +776,62 @@ def static_vs_adaptive_conformal_significance(report_df: pd.DataFrame, segment: 
         "static_error_std": float(static_errs.std()),
         "adaptive_error_std": float(adaptive_errs.std()),
         "note": note,
+    }
+
+
+# --- Auditing AdaptiveConformalGate's production ground-truth-proxy -------
+#
+# adaptive_conformal_gate.py's module docstring ("Production ground-truth-
+# proxy assumption") documents the assumption `pipeline.TwoStageDetector`
+# adopts in production: every scored flow is fed to `update()` as if it
+# were known traffic, on the assumption that genuine novel/attack traffic
+# is a small enough share of the stream not to matter. This can't be
+# validated in real time (that's exactly the ground truth the assumption
+# exists to work around), but it can be *audited* after the fact against
+# analyst triage -- dashboard-api's existing `triage_status` workflow,
+# which already reviews escalated alerts for other reasons.
+
+
+def audit_gate_against_triage(triage_records: Sequence[Dict[str, object]]) -> Dict[str, object]:
+    """Estimates how often the production ground-truth-proxy assumption was
+    actually violated, from analyst-triaged escalated alerts.
+
+    `triage_records` -- one dict per alert, at minimum `escalated: bool` and
+    `triage_status: str` (dashboard-api's `TRIAGE_STATUSES`: "new"/
+    "acknowledged"/"confirmed"/"false_positive") -- e.g. rows pulled from
+    dashboard-api's `alerts` table.
+
+    Only escalated alerts are ever triaged in this project's workflow, so
+    this can only audit "of what we escalated, how much genuinely wasn't
+    known traffic" -- it has no visibility into the symmetric failure (a
+    genuine novel attack that never got escalated at all, so no analyst
+    ever saw it to triage). That blind spot is inherent to this proxy, not
+    a gap in this function; see the module docstring above.
+
+    A `false_positive` triage means the analyst determined the escalated
+    flow genuinely was known/benign -- exactly what the proxy assumed when
+    it fed that flow into `update()`, so this is the *expected*, assumption-
+    consistent outcome. A `confirmed` triage means the flow genuinely
+    wasn't known traffic, so the proxy's "treat as known" assumption was
+    wrong for that flow -- `confirmed_fraction` is the empirical rate of
+    that violation among triaged escalations, and is the number to watch:
+    a value the operator judges too high (this function doesn't set that
+    threshold -- it depends on the deployment's own risk tolerance) is the
+    signal the assumption may no longer hold, not something this function
+    corrects on its own.
+    """
+    escalated = [r for r in triage_records if r.get("escalated")]
+    triaged = [r for r in escalated if r.get("triage_status") in ("confirmed", "false_positive")]
+    n_confirmed = sum(1 for r in triaged if r["triage_status"] == "confirmed")
+    n_false_positive = sum(1 for r in triaged if r["triage_status"] == "false_positive")
+
+    return {
+        "n_escalated": len(escalated),
+        "n_escalated_triaged": len(triaged),
+        "n_confirmed": n_confirmed,
+        "n_false_positive": n_false_positive,
+        "triage_coverage": float(len(triaged) / len(escalated)) if escalated else float("nan"),
+        "confirmed_fraction": float(n_confirmed / len(triaged)) if triaged else float("nan"),
     }
 
 

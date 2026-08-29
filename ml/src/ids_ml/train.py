@@ -28,6 +28,7 @@ import logging
 import sys
 from pathlib import Path
 
+from .adaptive_conformal_gate import AdaptiveConformalGate
 from .conformal_gate import calibrate_threshold
 from .data import load_and_map
 from .evaluation import adversarial_robustness_report, leakage_comparison_report, per_category_report
@@ -44,6 +45,7 @@ logger = logging.getLogger("ids_ml.train")
 GATE_TYPE_FILENAME = "gate_type.txt"
 OPENSET_GATE_FILENAME = "openset_gate.joblib"
 ESCALATION_GATE_FILENAME = "escalation_gate.joblib"
+ESCALATION_KIND_FILENAME = "escalation_kind.txt"  # "static" | "adaptive"; absent means "static" (pre-dates this file)
 
 
 def parse_args(argv=None) -> argparse.Namespace:
@@ -64,12 +66,26 @@ def parse_args(argv=None) -> argparse.Namespace:
         help="Fit an open-set escalation gate and save it alongside the models (default: none, closed-set only)",
     )
     parser.add_argument("--escalation-budget", type=float, default=0.1, help="Target escalation rate for --gate calibration")
+    parser.add_argument(
+        "--adaptive-escalation",
+        action="store_true",
+        help=(
+            "Use adaptive_conformal_gate.AdaptiveConformalGate (online-updating threshold, seeded from the "
+            "validation split) instead of a static conformal_gate.ConformalGate. Requires --gate != none. "
+            "This opts into the production ground-truth-proxy documented in adaptive_conformal_gate.py's "
+            "module docstring -- read that before using this outside a demo/prototype deployment."
+        ),
+    )
+    parser.add_argument("--adaptive-gamma", type=float, default=0.01, help="AdaptiveConformalGate step size")
+    parser.add_argument("--adaptive-window-size", type=int, default=200, help="AdaptiveConformalGate sliding-window size")
     parser.add_argument("-v", "--verbose", action="store_true")
     return parser.parse_args(argv)
 
 
 def main(argv=None) -> int:
     args = parse_args(argv)
+    if args.adaptive_escalation and args.gate == "none":
+        raise ValueError("--adaptive-escalation requires --gate softmax or --gate openset")
     logging.basicConfig(
         level=logging.DEBUG if args.verbose else logging.INFO,
         format="%(asctime)s %(levelname)s %(name)s: %(message)s",
@@ -150,17 +166,37 @@ def main(argv=None) -> int:
             gate = SoftmaxGate(stage2)  # no fitted state of its own; reconstructed fresh in serve.py
 
         calib_scores = [r.unknown_mass for r in gate.recalibrate_batch(X_val)]
-        escalation_gate = calibrate_threshold(calib_scores, budget=args.escalation_budget)
-        escalation_gate.save(model_dir / ESCALATION_GATE_FILENAME)
-        (model_dir / GATE_TYPE_FILENAME).write_text(args.gate)
 
-        logger.info(
-            "Fit %s gate, calibrated on %d validation rows: escalation threshold=%.4f for budget=%.2f",
-            args.gate,
-            escalation_gate.n_calibration,
-            escalation_gate.threshold,
-            args.escalation_budget,
-        )
+        if args.adaptive_escalation:
+            escalation_gate = AdaptiveConformalGate(
+                budget=args.escalation_budget, gamma=args.adaptive_gamma, window_size=args.adaptive_window_size
+            ).seed(calib_scores)
+            escalation_gate.save(model_dir / ESCALATION_GATE_FILENAME)
+            (model_dir / ESCALATION_KIND_FILENAME).write_text("adaptive")
+            logger.info(
+                "Fit %s gate, seeded adaptive escalation gate from %d validation rows: "
+                "initial threshold=%.4f, budget=%.2f, gamma=%.4f, window_size=%d -- see "
+                "adaptive_conformal_gate.py's module docstring for the production ground-truth-proxy "
+                "assumption this online-updating gate is deployed under",
+                args.gate,
+                len(calib_scores),
+                escalation_gate.threshold,
+                args.escalation_budget,
+                args.adaptive_gamma,
+                args.adaptive_window_size,
+            )
+        else:
+            escalation_gate = calibrate_threshold(calib_scores, budget=args.escalation_budget)
+            escalation_gate.save(model_dir / ESCALATION_GATE_FILENAME)
+            (model_dir / ESCALATION_KIND_FILENAME).write_text("static")
+            logger.info(
+                "Fit %s gate, calibrated on %d validation rows: escalation threshold=%.4f for budget=%.2f",
+                args.gate,
+                escalation_gate.n_calibration,
+                escalation_gate.threshold,
+                args.escalation_budget,
+            )
+        (model_dir / GATE_TYPE_FILENAME).write_text(args.gate)
 
     return 0
 

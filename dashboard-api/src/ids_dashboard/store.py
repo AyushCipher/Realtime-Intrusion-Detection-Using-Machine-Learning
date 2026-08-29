@@ -18,7 +18,7 @@ from typing import Any, Dict, List, Optional
 
 TRIAGE_STATUSES = ("new", "acknowledged", "confirmed", "false_positive")
 
-_SCHEMA = """
+_SCHEMA_TABLES = """
 CREATE TABLE IF NOT EXISTS alerts (
     alert_id TEXT PRIMARY KEY,
     flow_id TEXT NOT NULL,
@@ -46,11 +46,6 @@ CREATE TABLE IF NOT EXISTS alerts (
     triage_note TEXT,
     triage_updated_at REAL
 );
-CREATE INDEX IF NOT EXISTS idx_alerts_scored_at ON alerts(scored_at);
-CREATE INDEX IF NOT EXISTS idx_alerts_severity ON alerts(severity);
-CREATE INDEX IF NOT EXISTS idx_alerts_class ON alerts(stage2_predicted_class);
-CREATE INDEX IF NOT EXISTS idx_alerts_triage ON alerts(triage_status);
-CREATE INDEX IF NOT EXISTS idx_alerts_escalated ON alerts(escalated);
 
 -- Tier 2 (tier2_reasoner) explanations, joined to alerts by alert_id.
 -- Not every alert has one: only escalated alerts are ever sent to Tier 2
@@ -75,6 +70,27 @@ CREATE TABLE IF NOT EXISTS explanations (
     schema_version INTEGER NOT NULL,
     received_at REAL NOT NULL
 );
+"""
+
+# Column, DDL-fragment pairs added to `alerts` after this table's first
+# release (open-set escalation -- see ml/README.md). `CREATE TABLE IF NOT
+# EXISTS` is a no-op against a database file created before these existed
+# (e.g. a stale docker-compose volume from before Tier 2 was wired in), so
+# without this migration step those columns -- and the index below that
+# references one of them -- would be silently missing forever on such a
+# file, rather than merely absent from a fresh one.
+_ALERTS_COLUMN_MIGRATIONS = (
+    ("unknown_mass", "REAL NOT NULL DEFAULT 0.0"),
+    ("escalated", "INTEGER NOT NULL DEFAULT 0"),
+    ("escalation_trigger", "TEXT NOT NULL DEFAULT ''"),
+)
+
+_SCHEMA_INDEXES = """
+CREATE INDEX IF NOT EXISTS idx_alerts_scored_at ON alerts(scored_at);
+CREATE INDEX IF NOT EXISTS idx_alerts_severity ON alerts(severity);
+CREATE INDEX IF NOT EXISTS idx_alerts_class ON alerts(stage2_predicted_class);
+CREATE INDEX IF NOT EXISTS idx_alerts_triage ON alerts(triage_status);
+CREATE INDEX IF NOT EXISTS idx_alerts_escalated ON alerts(escalated);
 CREATE INDEX IF NOT EXISTS idx_explanations_alert_id ON explanations(alert_id);
 """
 
@@ -105,7 +121,12 @@ class AlertStore:
         self._conn.row_factory = sqlite3.Row
         self._lock = threading.Lock()
         with self._lock:
-            self._conn.executescript(_SCHEMA)
+            self._conn.executescript(_SCHEMA_TABLES)
+            existing_columns = {row["name"] for row in self._conn.execute("PRAGMA table_info(alerts)")}
+            for column, ddl in _ALERTS_COLUMN_MIGRATIONS:
+                if column not in existing_columns:
+                    self._conn.execute(f"ALTER TABLE alerts ADD COLUMN {column} {ddl}")
+            self._conn.executescript(_SCHEMA_INDEXES)
             self._conn.commit()
 
     def insert_alert(self, alert: Dict[str, Any]) -> bool:

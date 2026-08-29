@@ -79,6 +79,51 @@ def test_tracks_target_budget_on_a_stationary_stream():
     assert abs(realized_rate - budget) < 0.05
 
 
+def test_realized_escalation_rate_is_nan_before_any_update():
+    gate = AdaptiveConformalGate(budget=0.1)
+    assert np.isnan(gate.realized_escalation_rate)
+
+
+def test_realized_escalation_rate_tracks_recent_update_calls():
+    gate = AdaptiveConformalGate(budget=0.1, gamma=0.02, window_size=100)
+    gate.seed(list(np.linspace(0.0, 1.0, 100)))
+
+    for s in [0.99] * 3:  # near-max scores, all escalate
+        gate.update(s)
+    for s in [0.0] * 7:  # near-min scores, none escalate
+        gate.update(s)
+
+    assert gate.realized_escalation_rate == pytest.approx(0.3)
+
+
+def test_save_load_round_trip_preserves_online_state(tmp_path):
+    gate = AdaptiveConformalGate(budget=0.1, gamma=0.02, window_size=50)
+    rng = np.random.default_rng(2)
+    gate.seed(rng.uniform(0.0, 1.0, size=50))
+    for s in rng.uniform(0.0, 1.0, size=30):
+        gate.update(float(s))
+
+    path = tmp_path / "adaptive_gate.joblib"
+    gate.save(path)
+    loaded = AdaptiveConformalGate.load(path)
+
+    assert loaded.budget == gate.budget
+    assert loaded.gamma == gate.gamma
+    assert loaded.window_size == gate.window_size
+    assert loaded.alpha_t == pytest.approx(gate.alpha_t)
+    assert loaded.threshold == pytest.approx(gate.threshold)
+    assert loaded.realized_escalation_rate == pytest.approx(gate.realized_escalation_rate)
+
+    # Continuing to update the loaded gate must behave identically to
+    # continuing the original -- proves the window/history round-tripped,
+    # not just the scalar alpha_t.
+    more_scores = rng.uniform(0.0, 1.0, size=10)
+    original_decisions = [gate.update(float(s)) for s in more_scores]
+    loaded_decisions = [loaded.update(float(s)) for s in more_scores]
+    assert original_decisions == loaded_decisions
+    assert loaded.alpha_t == pytest.approx(gate.alpha_t)
+
+
 def test_tracks_target_budget_after_a_distribution_shift():
     # A stream that shifts to systematically higher scores partway through
     # (a stand-in for concept drift) -- the adaptive gate's realized

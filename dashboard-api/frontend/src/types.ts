@@ -39,9 +39,15 @@ export interface Alert {
   model_version: string;
   schema_version: number;
   received_at: number;
-  triage_status: TriageStatus;
-  triage_note: string | null;
-  triage_updated_at: number | null;
+  // Store-added, not part of ml's own alert schema -- always present on a
+  // REST-fetched alert (round-tripped through the DB), but absent on an
+  // alert delivered live over the WebSocket (that's ml's raw Kafka event
+  // shape, broadcast as received -- see ingest_service.py's
+  // `_handle_alert`). Treat a missing triage_status as "new": a
+  // freshly-pushed alert has, by definition, never been triaged yet.
+  triage_status?: TriageStatus;
+  triage_note?: string | null;
+  triage_updated_at?: number | null;
 }
 
 // Mirrors tier2_reasoner/src/ids_tier2/schema.py's EXPLANATION_EVENT_FIELDS.
