@@ -30,6 +30,7 @@ def build_packets():
         (0.10, "10.0.0.2", 443, "10.0.0.1", 5555, "PA", 980),
         (0.20, "10.0.0.1", 5555, "10.0.0.2", 443, "FA", 0),
     ]
+
     for offset, src, sport, dst, dport, flags, payload_len in tcp_spec:
         pkt = Ether() / IP(src=src, dst=dst) / TCP(sport=sport, dport=dport, flags=flags)
         if payload_len:
@@ -43,6 +44,7 @@ def build_packets():
         (1.05, "10.0.0.6", 53, "10.0.0.5", 6000, 120),
         (1.10, "10.0.0.5", 6000, "10.0.0.6", 53, 40),
     ]
+    
     for offset, src, sport, dst, dport, payload_len in udp_spec:
         pkt = Ether() / IP(src=src, dst=dst) / UDP(sport=sport, dport=dport) / Raw(load=b"y" * payload_len)
         pkt.time = t0 + offset

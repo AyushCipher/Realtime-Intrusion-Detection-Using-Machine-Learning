@@ -1,0 +1,337 @@
+{
+  "Selected: Two-Stage Cascade (IF+XGB)": {
+    "accuracy": 0.9838,
+    "macro_precision": 0.9964,
+    "macro_recall": 0.9135,
+    "macro_f1": 0.9426,
+    "weighted_precision": 0.9842,
+    "weighted_recall": 0.9838,
+    "weighted_f1": 0.9827,
+    "training_time_seconds": 1.3722,
+    "latency": {
+      "median_ms": 18.5751,
+      "p95_ms": 33.8733,
+      "p99_ms": 35.758,
+      "throughput_fps": 53.8
+    },
+    "model_size_kb": 3790.9,
+    "per_class": {
+      "BENIGN": {
+        "precision": 0.9748,
+        "recall": 1.0,
+        "f1_score": 0.9872,
+        "support": 116
+      },
+      "Botnet": {
+        "precision": 1.0,
+        "recall": 1.0,
+        "f1_score": 1.0,
+        "support": 4
+      },
+      "Brute Force": {
+        "precision": 1.0,
+        "recall": 1.0,
+        "f1_score": 1.0,
+        "support": 6
+      },
+      "DoS/DDoS": {
+        "precision": 1.0,
+        "recall": 1.0,
+        "f1_score": 1.0,
+        "support": 36
+      },
+      "Heartbleed": {
+        "precision": 0.0,
+        "recall": 0.0,
+        "f1_score": 0.0,
+        "support": 0
+      },
+      "Infiltration": {
+        "precision": 1.0,
+        "recall": 0.5,
+        "f1_score": 0.6667,
+        "support": 2
+      },
+      "PortScan": {
+        "precision": 1.0,
+        "recall": 0.8947,
+        "f1_score": 0.9444,
+        "support": 19
+      },
+      "Web Attack": {
+        "precision": 1.0,
+        "recall": 1.0,
+        "f1_score": 1.0,
+        "support": 2
+      }
+    }
+  },
+  "Alternative 1: Standalone XGBoost": {
+    "accuracy": 1.0,
+    "macro_precision": 1.0,
+    "macro_recall": 1.0,
+    "macro_f1": 1.0,
+    "weighted_precision": 1.0,
+    "weighted_recall": 1.0,
+    "weighted_f1": 1.0,
+    "training_time_seconds": 1.0782,
+    "latency": {
+      "median_ms": 2.3507,
+      "p95_ms": 3.8165,
+      "p99_ms": 6.2807,
+      "throughput_fps": 425.4
+    },
+    "model_size_kb": 1690.3,
+    "per_class": {
+      "BENIGN": {
+        "precision": 1.0,
+        "recall": 1.0,
+        "f1_score": 1.0,
+        "support": 116
+      },
+      "Botnet": {
+        "precision": 1.0,
+        "recall": 1.0,
+        "f1_score": 1.0,
+        "support": 4
+      },
+      "Brute Force": {
+        "precision": 1.0,
+        "recall": 1.0,
+        "f1_score": 1.0,
+        "support": 6
+      },
+      "DoS/DDoS": {
+        "precision": 1.0,
+        "recall": 1.0,
+        "f1_score": 1.0,
+        "support": 36
+      },
+      "Heartbleed": {
+        "precision": 0.0,
+        "recall": 0.0,
+        "f1_score": 0.0,
+        "support": 0
+      },
+      "Infiltration": {
+        "precision": 1.0,
+        "recall": 1.0,
+        "f1_score": 1.0,
+        "support": 2
+      },
+      "PortScan": {
+        "precision": 1.0,
+        "recall": 1.0,
+        "f1_score": 1.0,
+        "support": 19
+      },
+      "Web Attack": {
+        "precision": 1.0,
+        "recall": 1.0,
+        "f1_score": 1.0,
+        "support": 2
+      }
+    }
+  },
+  "Alternative 2: Random Forest": {
+    "accuracy": 0.9946,
+    "macro_precision": 0.9988,
+    "macro_recall": 0.9286,
+    "macro_f1": 0.9518,
+    "weighted_precision": 0.9946,
+    "weighted_recall": 0.9946,
+    "weighted_f1": 0.9937,
+    "training_time_seconds": 0.4175,
+    "latency": {
+      "median_ms": 59.8506,
+      "p95_ms": 81.8275,
+      "p99_ms": 90.293,
+      "throughput_fps": 16.7
+    },
+    "model_size_kb": 783.3,
+    "per_class": {
+      "BENIGN": {
+        "precision": 0.9915,
+        "recall": 1.0,
+        "f1_score": 0.9957,
+        "support": 116
+      },
+      "Botnet": {
+        "precision": 1.0,
+        "recall": 1.0,
+        "f1_score": 1.0,
+        "support": 4
+      },
+      "Brute Force": {
+        "precision": 1.0,
+        "recall": 1.0,
+        "f1_score": 1.0,
+        "support": 6
+      },
+      "DoS/DDoS": {
+        "precision": 1.0,
+        "recall": 1.0,
+        "f1_score": 1.0,
+        "support": 36
+      },
+      "Heartbleed": {
+        "precision": 0.0,
+        "recall": 0.0,
+        "f1_score": 0.0,
+        "support": 0
+      },
+      "Infiltration": {
+        "precision": 1.0,
+        "recall": 0.5,
+        "f1_score": 0.6667,
+        "support": 2
+      },
+      "PortScan": {
+        "precision": 1.0,
+        "recall": 1.0,
+        "f1_score": 1.0,
+        "support": 19
+      },
+      "Web Attack": {
+        "precision": 1.0,
+        "recall": 1.0,
+        "f1_score": 1.0,
+        "support": 2
+      }
+    }
+  },
+  "Alternative 3: Logistic Regression": {
+    "accuracy": 0.9892,
+    "macro_precision": 0.8547,
+    "macro_recall": 0.8571,
+    "macro_f1": 0.8559,
+    "weighted_precision": 0.9786,
+    "weighted_recall": 0.9892,
+    "weighted_f1": 0.9838,
+    "training_time_seconds": 0.0564,
+    "latency": {
+      "median_ms": 0.1607,
+      "p95_ms": 0.308,
+      "p99_ms": 0.4349,
+      "throughput_fps": 6224.7
+    },
+    "model_size_kb": 4.8,
+    "per_class": {
+      "BENIGN": {
+        "precision": 0.9831,
+        "recall": 1.0,
+        "f1_score": 0.9915,
+        "support": 116
+      },
+      "Botnet": {
+        "precision": 1.0,
+        "recall": 1.0,
+        "f1_score": 1.0,
+        "support": 4
+      },
+      "Brute Force": {
+        "precision": 1.0,
+        "recall": 1.0,
+        "f1_score": 1.0,
+        "support": 6
+      },
+      "DoS/DDoS": {
+        "precision": 1.0,
+        "recall": 1.0,
+        "f1_score": 1.0,
+        "support": 36
+      },
+      "Heartbleed": {
+        "precision": 0.0,
+        "recall": 0.0,
+        "f1_score": 0.0,
+        "support": 0
+      },
+      "Infiltration": {
+        "precision": 0.0,
+        "recall": 0.0,
+        "f1_score": 0.0,
+        "support": 2
+      },
+      "PortScan": {
+        "precision": 1.0,
+        "recall": 1.0,
+        "f1_score": 1.0,
+        "support": 19
+      },
+      "Web Attack": {
+        "precision": 1.0,
+        "recall": 1.0,
+        "f1_score": 1.0,
+        "support": 2
+      }
+    }
+  },
+  "Alternative 4: Decision Tree": {
+    "accuracy": 1.0,
+    "macro_precision": 1.0,
+    "macro_recall": 1.0,
+    "macro_f1": 1.0,
+    "weighted_precision": 1.0,
+    "weighted_recall": 1.0,
+    "weighted_f1": 1.0,
+    "training_time_seconds": 0.0103,
+    "latency": {
+      "median_ms": 0.0855,
+      "p95_ms": 0.2472,
+      "p99_ms": 0.3958,
+      "throughput_fps": 11695.9
+    },
+    "model_size_kb": 3.5,
+    "per_class": {
+      "BENIGN": {
+        "precision": 1.0,
+        "recall": 1.0,
+        "f1_score": 1.0,
+        "support": 116
+      },
+      "Botnet": {
+        "precision": 1.0,
+        "recall": 1.0,
+        "f1_score": 1.0,
+        "support": 4
+      },
+      "Brute Force": {
+        "precision": 1.0,
+        "recall": 1.0,
+        "f1_score": 1.0,
+        "support": 6
+      },
+      "DoS/DDoS": {
+        "precision": 1.0,
+        "recall": 1.0,
+        "f1_score": 1.0,
+        "support": 36
+      },
+      "Heartbleed": {
+        "precision": 0.0,
+        "recall": 0.0,
+        "f1_score": 0.0,
+        "support": 0
+      },
+      "Infiltration": {
+        "precision": 1.0,
+        "recall": 1.0,
+        "f1_score": 1.0,
+        "support": 2
+      },
+      "PortScan": {
+        "precision": 1.0,
+        "recall": 1.0,
+        "f1_score": 1.0,
+        "support": 19
+      },
+      "Web Attack": {
+        "precision": 1.0,
+        "recall": 1.0,
+        "f1_score": 1.0,
+        "support": 2
+      }
+    }
+  }
+}

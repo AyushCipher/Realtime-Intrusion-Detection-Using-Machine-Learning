@@ -1,0 +1,87 @@
+Open a terminal in the repo root (c:\Users\ayush\OneDrive\Desktop\Urop Project).
+
+Start everything:
+
+
+docker compose up -d --build
+First run takes a few minutes — it builds 4 images and trains the demo ML model at build time. Subsequent runs are fast (cached layers).
+
+Watch it come up (optional, but useful the first time):
+
+
+docker compose ps
+docker compose logs -f
+Ctrl+C to stop following logs (containers keep running).
+
+Open the dashboard: http://localhost:5173
+Sign in with analyst / changeme123 (from docker-compose.yml).
+
+Give it ~30-60 seconds — ingestion replays its demo pcap on a loop, ml scores it, alerts should start appearing in the Live Feed.
+
+Verify it end-to-end without watching the UI (this is what proves the whole chain actually worked, not just that containers started):
+
+
+python integration/test_e2e.py
+Stop it when done:
+
+
+docker compose down
+Add -v if you also want to wipe the Kafka/alert-history volumes (clean slate next time).
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+What I'll do
+Engineering to make the system actually complete:
+
+Retry/backoff + rate-limit-aware pacing for Tier 2 (blocks everything else Tier 2-related — building now regardless)
+Wire Tier 2 into docker-compose.yml, and fix ml's Dockerfile/entrypoint to actually enable the gate=/escalation_gate= options so the demo produces real escalated: true alerts
+Wire dashboard-api to display unknown_mass, escalated, and Tier 2 explanations
+Design and prototype a live ground-truth-proxy solution for AdaptiveConformalGate in production (I'll flag the assumption it rests on for your sign-off when I get there)
+Research work to strengthen what a paper would report:
+5. OpenAUC (instead of plain AUROC) for the open-set metric
+6. Escalation-budget sweep curve (recall vs. budget, not just the one fixed 10% point)
+7. Cross-dataset generalization check (CICIDS2018 → UNSW-NB15)
+8. Pull more CICIDS2018 days for PortScan/Heartbleed coverage in the LOFO rotation
+9. Once retry/backoff exists: scale H3 up from n=9 to a real sample with paired significance testing, same treatment H1/H2 already got
+10. Keep running live tests as quota allows, and report whatever they say — including if something comes back worse than hoped, as happened with the latency finding
+
+On request, not automatically:
+11. Draft a paper skeleton (methods, real results tables, related work grounded in the papers I actually read) — a draft for you to take over, not final text
+
+What you'll have to do — I can't do these
+Decide the paper's scope, because it changes what "done" means for everything above:
+Narrow (H1 + H2 only) — publishable today, unaffected by anything Tier 2-related
+Full architecture, honestly framed ("we built it and measured where the real-time claim breaks down") — achievable once items 1-3 above are done
+Fully rigorous (statistically powered H3 too) — needs items 1 and 9 done first, and real time/quota invested
+Manage LLM API access going forward — decide whether to add billing for reliable throughput (free tier is now a demonstrated bottleneck) or proceed slower on the free tier
+Read and understand every result well enough to defend it yourself — not something I can hand you a substitute for
+Own and write the actual paper prose if one gets published under your name
+Decide the target venue (workshop, arXiv, conference) — affects how much of the above is actually required before submitting
+Decide on git remote / making the repo public, and where the downloaded real data ends up living permanently (it's still sitting in an ephemeral scratchpad)
+If you want explanation quality checked beyond the automatable technique-match proxy — that needs real human evaluation, which only you (or people you recruit) can do
+Any AI-disclosure or academic-integrity requirements specific to wherever this gets submitted — only you know your program's policies
+Want me to start on retry/backoff now, or pick something else off that list first?

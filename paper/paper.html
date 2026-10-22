@@ -1,0 +1,296 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<title>Open-Set Escalation and LLM-Grounded Triage for Network Intrusion Detection</title>
+<style>
+  @page { size: A4; margin: 20mm 16mm 20mm 16mm; }
+  * { box-sizing: border-box; }
+  body {
+    font-family: "Times New Roman", Times, "Liberation Serif", serif;
+    font-size: 10pt;
+    line-height: 1.35;
+    color: #111;
+    margin: 0;
+  }
+  .title {
+    text-align: center;
+    font-size: 17pt;
+    font-weight: bold;
+    margin: 0 0 6pt 0;
+    line-height: 1.25;
+  }
+  .authors {
+    text-align: center;
+    font-size: 11pt;
+    margin: 0 0 2pt 0;
+  }
+  .affil {
+    text-align: center;
+    font-size: 9.5pt;
+    font-style: italic;
+    color: #333;
+    margin: 0 0 14pt 0;
+  }
+  .abstract {
+    margin: 0 8mm 10pt 8mm;
+    font-size: 9.5pt;
+  }
+  .abstract-title {
+    font-weight: bold;
+    font-style: italic;
+  }
+  .keywords {
+    margin: 6pt 8mm 12pt 8mm;
+    font-size: 9.5pt;
+  }
+  .keywords-title { font-weight: bold; font-style: italic; }
+
+  .columns {
+    column-count: 2;
+    column-gap: 8mm;
+    column-rule: 0.5pt solid #ccc;
+  }
+  h2 {
+    font-size: 11pt;
+    margin: 12pt 0 4pt 0;
+    break-after: avoid;
+  }
+  h3 {
+    font-size: 10pt;
+    font-style: italic;
+    margin: 8pt 0 3pt 0;
+    break-after: avoid;
+  }
+  p { margin: 0 0 6pt 0; text-align: justify; orphans: 3; widows: 3; }
+  .section-num { margin-right: 4pt; }
+
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 8pt;
+    margin: 4pt 0 8pt 0;
+    break-inside: avoid;
+  }
+  caption {
+    font-size: 8.3pt;
+    text-align: left;
+    margin-bottom: 3pt;
+    caption-side: top;
+  }
+  th, td {
+    border-top: 0.5pt solid #000;
+    border-bottom: 0.5pt solid #000;
+    padding: 2pt 3pt;
+    text-align: left;
+  }
+  thead th { border-bottom: 1pt solid #000; }
+  tbody tr:last-child td { border-bottom: 1pt solid #000; }
+  .num { text-align: right; font-variant-numeric: tabular-nums; }
+
+  .eq {
+    font-family: "Cambria Math", "Times New Roman", serif;
+    text-align: center;
+    margin: 6pt 0;
+    font-size: 9.5pt;
+  }
+
+  code, .mono { font-family: "Consolas", "Courier New", monospace; font-size: 8.5pt; }
+
+  ul, ol { margin: 2pt 0 6pt 14pt; padding: 0; }
+  li { margin-bottom: 2pt; text-align: justify; }
+
+  .refs { font-size: 8.3pt; }
+  .refs li { margin-bottom: 3pt; }
+
+  .callout {
+    font-size: 9pt;
+    border-left: 2pt solid #666;
+    padding-left: 6pt;
+    margin: 6pt 0;
+    font-style: italic;
+    break-inside: avoid;
+  }
+
+  .fig {
+    break-inside: avoid;
+    margin: 6pt 0 8pt 0;
+    text-align: center;
+  }
+  .fig-caption { font-size: 8.3pt; text-align: left; margin-top: 3pt; }
+  .arch {
+    border: 0.5pt solid #444;
+    padding: 6pt;
+    font-family: "Consolas", "Courier New", monospace;
+    font-size: 7pt;
+    text-align: left;
+    line-height: 1.3;
+    white-space: pre;
+    background: #fafafa;
+  }
+
+  sup.cite { font-size: 7.5pt; }
+
+  .footnote {
+    font-size: 7.8pt;
+    color: #333;
+  }
+</style>
+</head>
+<body>
+
+<div class="title">Open-Set Escalation and LLM-Grounded Triage for Network Intrusion Detection: A Conformal-Calibration Cascade Evaluated on Real Traffic</div>
+<div class="authors">Author Name<sup>1</sup></div>
+<div class="affil"><sup>1</sup>Independent Project &mdash; sample manuscript prepared for demonstration purposes, not a peer-reviewed submission</div>
+
+<div class="abstract">
+<span class="abstract-title">Abstract&mdash;</span>
+Network intrusion detection systems trained on closed sets of known attack families are, by construction, unable to recognize genuinely novel attacks. We present a two-tier cascade that (i) performs closed-set detection with an Isolation Forest pre-filter and an XGBoost classifier, (ii) recalibrates the classifier's output through an open-set head (an OpenMax adaptation from deep-network logits to gradient-boosted-tree margins) whose escalation decision is governed by a conformal-prediction threshold under an explicit analyst-hours budget, and (iii) routes escalated flows to a retrieval-augmented large-language-model (LLM) reasoner that grounds its explanation in a curated MITRE ATT&amp;CK knowledge base. We evaluate three hypotheses against both a synthetic fixture and real CSE-CIC-IDS2018 traffic. On real data, the open-set gate significantly outperforms a softmax-confidence baseline at matched escalation budget (Wilcoxon <i>p</i>=0.00012), an online-adaptive conformal threshold holds its target budget roughly 100&times; more precisely than a one-shot static calibration under real day-to-day drift (<i>p</i>&lt;0.002), and retrieval grounding significantly improves the LLM's technique attribution over an ungrounded baseline (McNemar exact <i>p</i>=0.0039). We report these results alongside their honest limitations &mdash; small per-family sample sizes, a demo-scale pipeline, and a measured LLM-tier latency and reliability ceiling that rules out real-time operation on a free-tier API budget &mdash; and describe a documented, opt-in production design for online threshold adaptation whose core assumption is deliberately left unvalidated against live ground truth pending operator sign-off.
+</div>
+
+<div class="keywords"><span class="keywords-title">Index Terms&mdash;</span> network intrusion detection, open-set recognition, conformal prediction, concept drift, retrieval-augmented generation, large language models, MITRE ATT&amp;CK</div>
+
+<div class="columns">
+
+<h2><span class="section-num">1</span>Introduction</h2>
+<p>Supervised network intrusion detection systems (NIDS) are typically trained and evaluated as closed-set classifiers: every test-time flow is assumed to belong to one of the attack families seen during training. This assumption is false in deployment by definition &mdash; a zero-day attack is, precisely, a family the model has never seen. A closed-set classifier does not fail loudly on such traffic; it silently assigns it the label of whichever known class looks most similar, with no signal to an analyst that the underlying traffic pattern was never actually characterized.</p>
+<p>Open-set recognition addresses this by adding a third outcome &mdash; <i>unknown</i> &mdash; alongside the model's known-class predictions. For a NIDS specifically, "unknown" is naturally operationalized as <i>escalation</i>: routing a flow to a human analyst (or a second, more expensive automated tier) rather than trusting the closed-set label outright. This reframes open-set detection as a budgeted decision problem &mdash; an analyst has finite hours, so the system must escalate at a bounded rate, not merely at a bounded false-negative rate.</p>
+<p>This paper describes and evaluates a system built around that framing. Stage 1 is a cheap Isolation Forest anomaly pre-filter; only flows it flags reach Stage 2, an XGBoost multi-class classifier. Stage 2's raw per-class margins are then recalibrated by an open-set gate &mdash; either a softmax-confidence baseline or an OpenMax-style adaptation &mdash; producing an <i>unknown mass</i> score. A conformal-prediction threshold, calibrated against an explicit escalation budget, converts that score into an escalate/do-not-escalate decision with a distribution-free coverage guarantee. Escalated flows are optionally handed to a Tier-2 reasoner: a retrieval-augmented LLM that grounds its explanation in a small, curated MITRE ATT&amp;CK<sup class="cite">[8]</sup> knowledge base rather than naming techniques from memory alone.</p>
+<p>We test three concrete hypotheses, each with a real-data evaluation, not only a synthetic one:</p>
+<ul>
+<li><b>H1</b>: an open-set gate escalates held-out attack families more effectively than a closed-set softmax-confidence trigger, at matched escalation budget.</li>
+<li><b>H2</b>: an online-adaptive conformal threshold holds its target escalation budget more precisely than a one-shot static calibration under real distributional drift.</li>
+<li><b>H3</b>: retrieval grounding improves an LLM reasoner's ability to correctly attribute an escalated alert to its true MITRE ATT&amp;CK technique, relative to an ungrounded baseline.</li>
+</ul>
+<p>All three are supported by real, statistically significant results (Section 5), reported alongside the sample-size and infrastructure caveats that qualify them (Section 6) &mdash; including a live-measured finding that the LLM tier's latency and free-tier reliability rule out real-time operation in its current form, a result we consider as important to report honestly as the positive ones.</p>
+
+<h2><span class="section-num">2</span>Related Work</h2>
+<p><i>Open-set recognition.</i> Bendale and Boult<sup class="cite">[1]</sup> introduced OpenMax, replacing a deep network's final softmax layer with a per-class Weibull-tail recalibration over distance from each class's mean activation vector, redistributing score mass to an explicit "unknown" logit. OpenMax was formulated for a deep network's pre-softmax logit vector; we adapt the same mean-activation-vector-plus-Weibull-tail mechanism to XGBoost's per-class raw margins (<code class="mono">output_margin=True</code>), which play the structurally analogous role of an unnormalized per-class score vector, without assuming this adaptation inherits whatever regularities a trained deep network's logit geometry might otherwise provide.</p>
+<p><i>Conformal prediction.</i> Split-conformal prediction<sup class="cite">[2,3]</sup> calibrates a threshold from a held-out calibration set to give a finite-sample, distribution-free coverage guarantee, without a parametric assumption on the score distribution. That guarantee implicitly assumes the deployment distribution stays exchangeable with the calibration batch. Gibbs and Cand&egrave;s<sup class="cite">[4]</sup> relax this with Adaptive Conformal Inference (ACI), updating a significance level online after every observation so a target miscoverage rate is tracked under arbitrary, even adversarial, distribution shift, with no exchangeability assumption. We adapt ACI's update rule &mdash; originally formulated for prediction-interval miscoverage &mdash; to escalation-rate control, treating "this known flow was escalated" as the failure event a fixed-rate rule normally tracks.</p>
+<p><i>Open-set metrics.</i> Wang et al.<sup class="cite">[5]</sup> observe that plain AUROC of a novelty score, used alone, does not require a model to have also classified known samples correctly, and propose OpenAUC, which jointly requires correct closed-set classification and higher true-class confidence than any unknown sample's confidence. We implement OpenAUC as an additional evaluation metric (Section 4.4) alongside the AUROC already reported.</p>
+<p><i>Adjacent conformal-NIDS work.</i> Two recent systems were checked against directly before building the online-adaptation mechanism: CALIBURN<sup class="cite">[13]</sup> uses static Conformal Risk Control and explicitly names continuous online adaptation under drift as unimplemented future work; FIRCE/FADES<sup class="cite">[14]</sup> use periodic recalibration triggered by a drift-detection signal, a related but distinct mechanism from the continuous online updating we evaluate. Neither combines this with open-set/zero-day detection specifically.</p>
+<p><i>Datasets.</i> We evaluate on CICIDS2017<sup class="cite">[6]</sup> and CSE-CIC-IDS2018<sup class="cite">[7]</sup>, both CICFlowMeter-derived labeled flow datasets from the Canadian Institute for Cybersecurity, and on a synthetic fixture shaped like both for fast iteration.</p>
+<p><i>LLM-assisted triage.</i> Retrieval-augmented generation (RAG)<sup class="cite">[9]</sup> grounds a language model's output in retrieved reference documents rather than relying solely on parametric memory. We retrieve over a small, curated set of MITRE ATT&amp;CK<sup class="cite">[8]</sup> technique descriptions via TF&ndash;IDF cosine similarity, a deliberately lightweight choice (Section 3.4) that avoids an embedding-model dependency.</p>
+<p><i>Explainability and model components.</i> Per-alert feature attribution uses SHAP<sup class="cite">[10]</sup>; Stage 2 is XGBoost<sup class="cite">[11]</sup>; Stage 1 is Isolation Forest<sup class="cite">[12]</sup>.</p>
+
+<h2><span class="section-num">3</span>System Architecture</h2>
+<p>The system is four independently deployable services communicating over two Kafka topics: <code class="mono">network.flow.features</code> (ingestion&rarr;detector) and <code class="mono">network.ids.alerts</code> (detector&rarr;dashboard/Tier&nbsp;2), plus a third, <code class="mono">network.ids.explanations</code>, published by Tier&nbsp;2 back to the dashboard.</p>
+<div class="fig">
+<div class="arch">ingestion --flow.features--> [ detector ] --alerts--> dashboard-api --REST/WS--> browser
+ (pcap replay /         |    Stage1: IsolationForest         ^
+  live capture)         |    Stage2: XGBoost                 |
+                        |    Gate: OpenMax | Softmax          |
+                        |    Escalation: Conformal (static |  |
+                        |                or ACI-adaptive)     |
+                        +--alerts(escalated=true)-->  tier2 --explanations---+
+                                                        (RAG over ATT&CK
+                                                         + LLM reasoning)</div>
+<div class="fig-caption">Fig. 1. Service topology. Each service owns its own copy of the Kafka schema it depends on (documented, not code-shared), so no service imports another's code.</div>
+</div>
+
+<h3>3.1 Two-stage closed-set cascade</h3>
+<p>Stage 1 is an Isolation Forest anomaly pre-filter; only flows it flags reach the more expensive Stage 2. This bounds the pipeline's overall attack recall by Stage 1's own recall, made an explicit, separately-reported number rather than hidden inside one blended metric. Stage 2 is an XGBoost multi-class classifier over CICFlowMeter's per-flow features (duration, packet/byte counts and rates, inter-arrival-time statistics, TCP flag counts).</p>
+
+<h3>3.2 Open-set gate</h3>
+<p>Two interchangeable gates sit behind the same interface (<code class="mono">TwoStageDetector.gate</code>): a softmax-confidence baseline (<code class="mono">unknown_mass = 1&minus;max</code> predicted probability), and an OpenMax-style gate. For each known class, the OpenMax gate fits a mean activation vector and a Weibull tail over the distances of correctly-classified training examples' margins from that mean; at inference, the top-ranked classes' margins are shrunk in proportion to how far outside that tail the query sits, and the shrunk mass becomes an explicit <i>unknown</i> logit before a final softmax. Classes with fewer than four correctly-classified training examples, or near-zero spread in their tail distances, contribute no distance-based reduction rather than a degenerate Weibull fit &mdash; observed in practice on this project's rarest categories.</p>
+
+<h3>3.3 Conformal escalation threshold</h3>
+<p>A static gate (<code class="mono">ConformalGate</code>) sets a single threshold from one held-out calibration batch via a split-conformal quantile with the standard finite-sample correction, <code class="mono">level = min(&lceil;(n+1)(1&minus;budget)&rceil;/n, 1)</code>. An adaptive gate (<code class="mono">AdaptiveConformalGate</code>) instead updates a significance level <code class="mono">&alpha;<sub>t</sub></code> after every scored known-traffic flow:</p>
+<div class="eq">&alpha;<sub>t+1</sub> = &alpha;<sub>t</sub> + &gamma;&middot;(budget &minus; escalated<sub>t</sub>)</div>
+<p>with the live threshold read off a sliding window of recent scores at quantile level <code class="mono">1&minus;&alpha;<sub>t</sub></code>. A run of escalations pushes <code class="mono">&alpha;<sub>t</sub></code> down (raising the threshold, making escalation harder); a run of non-escalations pushes it up. This is Gibbs and Cand&egrave;s' ACI update<sup class="cite">[4]</sup>, applied to escalation-rate control.</p>
+
+<h3>3.4 Tier-2 LLM/RAG reasoning</h3>
+<p>Escalated alerts are consumed by a separate service that retrieves the top-<i>k</i> most relevant entries from a seven-entry curated MITRE ATT&amp;CK knowledge base (TF&ndash;IDF cosine similarity over each entry's category, name, and description text &mdash; deliberately not an embedding-based retriever, avoiding a PyTorch dependency that failed to load under this project's build environment's Windows Defender Application Control policy) and constructs a grounded prompt for a hosted LLM (Anthropic Claude or Google Gemini, behind a shared interface). The system prompt explicitly instructs the model not to invent a technique ID when no reference technique was retrieved.</p>
+
+<h2><span class="section-num">4</span>Methodology</h2>
+<h3>4.1 H1: leave-one-family-out open-set evaluation</h3>
+<p>For each non-benign attack family, that family is entirely withheld from training (leave-one-family-out, LOFO); Stage 2 and the gate are fit on the remaining known families' training split, the escalation threshold is calibrated on a genuinely separate held-out slice of <i>known</i> traffic (never rows Stage 2 was fit on, avoiding reading the model's own training-set overconfidence as evidence the threshold can be strict), and both gates are then evaluated on a test split containing the held-out family's traffic (treated as "unknown") plus known-family traffic. We report <i>unknown recall</i> (the escalation rate on the held-out family &mdash; i.e. zero-day catch rate at the fixed budget) and <i>unknown AUROC</i> (unknown-mass as a novelty score, independent of any specific threshold), repeated across 5 seeds per family, with a paired Wilcoxon signed-rank test across (family, seed) pairs.</p>
+
+<h3>4.2 H2: static vs. adaptive calibration under drift</h3>
+<p>Stage 2 and the softmax gate are fit on an early-traffic window; the escalation threshold is either calibrated once (static) or updated online (adaptive, seeded from the same calibration batch) as traffic streams through both the early window and a later, genuinely later-in-time window. We report each segment's realized escalation rate and its absolute error from the target budget, across 10 seeds, with a paired Wilcoxon test on that error.</p>
+
+<h3>4.3 H3: RAG vs. no-RAG technique attribution</h3>
+<p>For each of six attack categories the knowledge base covers, paired trials call the Tier-2 reasoner with retrieval enabled and disabled, using one shared rate-limited client so pacing is enforced against the combined call rate. Correctness is a single metric applied identically to both conditions: did the returned <code class="mono">suspected_technique_id</code> match the category's true technique in the knowledge base. We report a paired exact McNemar test (via the binomial distribution over discordant pairs, appropriate for the small paired-binary sample a live LLM batch produces, rather than the chi-square approximation).</p>
+
+<h3>4.4 Additional metrics implemented</h3>
+<p>Two further evaluation tools were implemented and unit-tested but not yet run at production scale against the full real-data corpus, and are reported here as methodological contributions rather than as results with numbers: an OpenAUC<sup class="cite">[5]</sup> metric computed alongside AUROC for every LOFO trial, and an escalation-budget sweep that reuses a fold's already-fit model and gate across a list of budgets (only the conformal quantile depends on budget), producing a recall-vs-budget curve rather than a single fixed-budget point.</p>
+
+<h2><span class="section-num">5</span>Results</h2>
+<h3>5.1 H1 on real CSE-CIC-IDS2018 traffic</h3>
+<p>Table I reports LOFO results on 8 days of real CSE-CIC-IDS2018 traffic (5 families with sufficient real-data support), budget=0.1, 5 seeds.</p>
+<table>
+<caption>TABLE I. H1, real CSE-CIC-IDS2018 (budget=0.1, mean of 5 seeds)</caption>
+<thead><tr><th>Family</th><th class="num">OpenMax<br/>recall</th><th class="num">Softmax<br/>recall</th><th class="num">OpenMax<br/>AUROC</th><th class="num">Softmax<br/>AUROC</th></tr></thead>
+<tbody>
+<tr><td>Botnet</td><td class="num">0.037</td><td class="num">0.000</td><td class="num">0.838</td><td class="num">0.821</td></tr>
+<tr><td>Brute Force</td><td class="num">0.087</td><td class="num">0.061</td><td class="num">0.628</td><td class="num">0.618</td></tr>
+<tr><td>DoS/DDoS</td><td class="num">0.465</td><td class="num">0.310</td><td class="num">0.437</td><td class="num">0.361</td></tr>
+<tr><td>Infiltration</td><td class="num">0.070</td><td class="num">0.074</td><td class="num">0.510</td><td class="num">0.531</td></tr>
+<tr><td>Web Attack</td><td class="num">0.169</td><td class="num">0.026</td><td class="num">0.742</td><td class="num">0.728</td></tr>
+</tbody>
+</table>
+<p>Paired across all 25 (family, seed) observations: mean unknown-recall 0.166 (OpenMax) vs. 0.094 (softmax), Wilcoxon <b>p=0.00012</b>; mean unknown-AUROC 0.631 vs. 0.612, <b>p=0.032</b>. OpenMax beats the softmax baseline on 4 of 5 real families (Infiltration is an approximate tie), a materially stronger and more significant result than the same protocol produced on a synthetic fixture (p=0.084, not significant at p&lt;0.05; full synthetic table omitted for space). Absolute recall remains low for both gates &mdash; even OpenMax's best case (DoS/DDoS, 0.465) leaves more than half of a genuinely novel family's traffic unescalated at a 10%-of-known-traffic budget &mdash; the realistic, harder number, not the synthetic fixture's near-perfect recalls.</p>
+
+<h3>5.2 H2 on real drift (early vs. late CSE-CIC-IDS2018 days)</h3>
+<table>
+<caption>TABLE II. H2, real data, early vs. late days (budget=0.1, 10 seeds)</caption>
+<thead><tr><th>Segment</th><th class="num">Static err.</th><th class="num">Adaptive err.</th><th class="num">Wilcoxon <i>p</i></th></tr></thead>
+<tbody>
+<tr><td>Pre-drift</td><td class="num">0.09932</td><td class="num">0.00092</td><td class="num"><b>0.00195</b></td></tr>
+<tr><td>Post-drift</td><td class="num">0.09955</td><td class="num">0.00086</td><td class="num"><b>0.00195</b></td></tr>
+<tr><td>Pooled</td><td class="num">0.09943</td><td class="num">0.00089</td><td class="num"><b>1.9&times;10<sup>-6</sup></b></td></tr>
+</tbody>
+</table>
+<p>The static gate's realized escalation rate collapsed to approximately 0.05% &mdash; essentially never escalating &mdash; against a 10% target budget, in <i>both</i> segments, including the segment matching its own calibration distribution; the adaptive gate held 10.08&ndash;10.09% throughout. This is a starker result than the synthetic fixture produced (an 18&ndash;19&times; error reduction there, vs. roughly two orders of magnitude here) and indicates that a small one-shot calibration batch against a heavy-tailed real score distribution, not drift specifically, is already enough to badly miscalibrate a static threshold &mdash; continuous online recalibration corrects both problems, not only concept drift.</p>
+
+<h3>5.3 H3: RAG-grounded LLM technique attribution</h3>
+<p>A live, paired batch of 36 planned calls (6 categories &times; 2 conditions &times; 3 trials) against a hosted LLM completed 20 calls (56%) under a free-tier API quota; 9 trials completed both conditions and are paired.</p>
+<table>
+<caption>TABLE III. H3, live paired RAG ablation</caption>
+<thead><tr><th>Condition</th><th class="num">Completed</th><th class="num">Correct / completed</th></tr></thead>
+<tbody>
+<tr><td>RAG-grounded</td><td class="num">10 / 18</td><td class="num"><b>10 / 10 (100%)</b></td></tr>
+<tr><td>Ungrounded</td><td class="num">10 / 18</td><td class="num">0 / 10 (0%)</td></tr>
+</tbody>
+</table>
+<p>Exact McNemar test on the 9 paired trials: <i>b</i>=9 (RAG correct, ungrounded incorrect), <i>c</i>=0, <b><i>p</i>=0.0039</b>, significant at <i>p</i>&lt;0.01. Every paired trial without exception shows RAG correctly naming the technique and the ungrounded condition correctly declining to guess one (per its system-prompt instruction), never the reverse. The 44% call failure rate is itself a finding, addressed in Section 6.</p>
+
+<h3>5.4 Latency and throughput</h3>
+<p>Measured on real CSE-CIC-IDS2018 (50,048-row test split): Stage&nbsp;1+2 single-flow median latency 9.67&nbsp;ms (p95 15.03&nbsp;ms, p99 16.41&nbsp;ms), yielding 103 flows/sec at the batch size (one flow per Kafka message) the live scoring service actually uses &mdash; a 68&times; gap from batch-size-128 throughput (7,116/sec), meaning 103/sec, not 7,116/sec, is the pipeline's real live ceiling absent a batching layer. Tier-2's own orchestration overhead (retrieval + prompt construction) is negligible (0.58&nbsp;ms); the real LLM call, measured across a fast isolated call (2.6&nbsp;s) and a realistic batch (23.5&ndash;60.4&nbsp;s per successful call, 2 of 6 failing outright even after retry in that batch), gives an amortized cost at a 10% escalation budget of</p>
+<div class="eq">9.67 + 0.10 &times; 40464 &asymp; 4056&nbsp;ms/flow</div>
+<p>&mdash; roughly 420&times; Tier&nbsp;1's own latency, not the &sim;60&times; an isolated fast call would suggest.</p>
+
+<h2><span class="section-num">6</span>Limitations</h2>
+<p><b>Sample size and statistical power.</b> H1's real-data result draws on 5 independent families (25 nominal (family, seed) pairs are correlated resamples of 5 underlying units, not 25 independent replications); H3's paired result rests on 9 discordant pairs. Small-sample results here should be read as "a real, significant effect was detected with the power available," not as precision estimates of the effect's magnitude.</p>
+<p><b>LLM-tier reliability is a genuine, currently unresolved gap, not a rounding error.</b> A retry/backoff/pacing wrapper correctly recovers from transient per-minute rate limiting, confirmed by live re-test, but 44% of calls in the H3 batch failed against what the failure pattern indicates is a free-tier daily quota ceiling &mdash; a different failure mode retry logic cannot fix by construction, since no bounded backoff helps against a limit that resets on its own clock. Combined with the &sim;420&times; amortized-latency finding, this pipeline is not real-time under sustained load in its current form.</p>
+<p><b>The online-adaptive threshold's production deployment rests on a stated, unvalidated assumption.</b> Feeding every live-scored flow into the adaptive gate's update step (rather than only genuinely known traffic, which is unobservable online without exactly the ground truth open-set detection exists to avoid needing) assumes novel-attack traffic is a small enough fraction of the live stream not to bias the online estimate materially. This is a documented, explicit, opt-in default, not silently defaulted on, with a companion audit mechanism that compares the online gate's behavior against delayed analyst-triage ground truth once available &mdash; but the assumption itself has not been checked against real production traffic, and is flagged as needing operator sign-off before use outside a demo setting.</p>
+<p><b>Dataset and deployment scale.</b> The reference deployment's end-to-end demo trains on a small synthetic fixture with a real-data validation pass reported separately (as above); PortScan and Heartbleed, present in the older CICIDS2017 release, are absent from CSE-CIC-IDS2018's public release entirely (verified against the actually-downloaded files' label set, correcting an earlier internal draft that incorrectly attributed their absence to simply not having downloaded the right days) and so have no real-data LOFO coverage in this evaluation. Cross-dataset generalization (e.g., training on CSE-CIC-IDS2018 and testing on UNSW-NB15) was scoped but not executed: UNSW-NB15's native feature schema is Argus-derived and structurally incompatible with the CICFlowMeter-derived features used throughout this work, and a methodologically valid comparison requires either training a second model on a NetFlow-standardized common feature set<sup class="cite">[5]</sup>-adjacent release of both datasets, or reusing only the open-set methodology on UNSW-NB15's own features &mdash; a materially larger undertaking than a direct cross-dataset test of the existing trained model.</p>
+
+<h2><span class="section-num">7</span>Conclusion</h2>
+<p>We presented and evaluated a three-tier network intrusion detection cascade combining a closed-set Isolation-Forest/XGBoost detector, a conformal-calibrated open-set escalation gate (static and online-adaptive variants), and a retrieval-grounded LLM reasoning tier. Against real CSE-CIC-IDS2018 traffic, the open-set gate significantly improves zero-day-family recall over a closed-set baseline at matched analyst-hours budget, online-adaptive calibration holds its target budget roughly two orders of magnitude more precisely than static calibration under real drift, and retrieval grounding significantly improves an LLM reasoner's technique attribution over an ungrounded baseline. Each positive result is reported with its governing sample-size caveat, and the system's most important negative finding &mdash; that the LLM reasoning tier's real-world latency and free-tier reliability rule out real-time operation as built &mdash; is reported with the same rigor as the positive results, together with a concrete, implemented (not merely proposed) monitoring mechanism for the one production design choice this work deliberately leaves for an operator's sign-off rather than defaulting silently.</p>
+
+<h2>References</h2>
+<ol class="refs">
+<li>A. Bendale and T. Boult, &ldquo;Towards Open Set Deep Networks,&rdquo; <i>Proc. IEEE CVPR</i>, 2016.</li>
+<li>V. Vovk, A. Gammerman, and G. Shafer, <i>Algorithmic Learning in a Random World</i>, Springer, 2005.</li>
+<li>A. N. Angelopoulos and S. Bates, &ldquo;A Gentle Introduction to Conformal Prediction and Distribution-Free Uncertainty Quantification,&rdquo; <i>arXiv:2107.07511</i>, 2021.</li>
+<li>I. Gibbs and E. Cand&egrave;s, &ldquo;Adaptive Conformal Inference Under Distribution Shift,&rdquo; <i>Proc. NeurIPS</i>, 2021.</li>
+<li>Z. Wang <i>et al.</i>, &ldquo;OpenAUC: Towards AUC-Oriented Open-Set Recognition,&rdquo; <i>Proc. NeurIPS</i>, 2022.</li>
+<li>I. Sharafaldin, A. H. Lashkari, and A. A. Ghorbani, &ldquo;Toward Generating a New Intrusion Detection Dataset and Intrusion Traffic Characterization,&rdquo; <i>Proc. ICISSP</i>, 2018.</li>
+<li>Canadian Institute for Cybersecurity, &ldquo;A Realistic Cyber Defense Dataset (CSE-CIC-IDS2018),&rdquo; AWS Registry of Open Data, 2018.</li>
+<li>The MITRE Corporation, &ldquo;MITRE ATT&amp;CK&reg;,&rdquo; attack.mitre.org, accessed 2026.</li>
+<li>P. Lewis <i>et al.</i>, &ldquo;Retrieval-Augmented Generation for Knowledge-Intensive NLP Tasks,&rdquo; <i>Proc. NeurIPS</i>, 2020.</li>
+<li>S. M. Lundberg and S.-I. Lee, &ldquo;A Unified Approach to Interpreting Model Predictions,&rdquo; <i>Proc. NeurIPS</i>, 2017.</li>
+<li>T. Chen and C. Guestrin, &ldquo;XGBoost: A Scalable Tree Boosting System,&rdquo; <i>Proc. ACM SIGKDD</i>, 2016.</li>
+<li>F. T. Liu, K. M. Ting, and Z.-H. Zhou, &ldquo;Isolation Forest,&rdquo; <i>Proc. IEEE ICDM</i>, 2008.</li>
+<li>&ldquo;CALIBURN,&rdquo; <i>arXiv:2605.24696</i>, 2026.</li>
+<li>&ldquo;FIRCE/FADES,&rdquo; <i>arXiv:2605.01962</i>, 2026; <i>MDPI Electronics</i>, 15(10):2114, 2026.</li>
+<li>&ldquo;DQN-IDS,&rdquo; <i>Proc. NDSS Workshop on Safe and Secure IoT Systems (SDIoTSec)</i>, 2026.</li>
+</ol>
+
+</div>
+
+<p class="footnote">This manuscript was prepared as a sample/demonstration document summarizing an independent software project's own real, reproducible evaluation results (see the project repository's README files for full methodology, raw tables, and source code). It has not been peer reviewed and is not submitted to any venue. Large-language-model assistance (Claude, Anthropic) was used in the underlying software engineering and in drafting this manuscript; disclose this consistent with the policy of any venue this is adapted for actual submission to.</p>
+
+</body>
+</html>

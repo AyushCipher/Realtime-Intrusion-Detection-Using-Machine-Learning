@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { connectAlertStream, type Credentials } from "../api";
+import { connectAlertStream, listAlerts, type Credentials } from "../api";
 import type { Alert, Tier2ExplanationBroadcast } from "../types";
 import AlertRow from "./AlertRow";
 
@@ -20,6 +20,15 @@ export default function LiveAlertFeed({
 
   useEffect(() => {
     let cancelled = false;
+
+    // Pre-populate with existing recent alerts from database
+    listAlerts(creds, { limit: 50 })
+      .then((res) => {
+        if (!cancelled && res.alerts) {
+          setAlerts(res.alerts);
+        }
+      })
+      .catch(() => {});
 
     connectAlertStream(
       creds,
