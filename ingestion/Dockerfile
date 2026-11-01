@@ -2,6 +2,11 @@ FROM python:3.11-slim
 
 WORKDIR /app
 
+# Scapy needs libpcap to compile BPF filters for live capture (--interface).
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends libpcap0.8 \
+    && rm -rf /var/lib/apt/lists/*
+
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 

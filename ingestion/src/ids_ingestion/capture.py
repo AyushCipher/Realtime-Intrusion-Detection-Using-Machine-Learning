@@ -20,6 +20,9 @@ logger = logging.getLogger(__name__)
 # consuming generator can tell "stopped" apart from "queue momentarily empty".
 _STOP = object()
 
+# How often the consuming generator wakes up to check the sniffer thread is still alive.
+_POLL_SECONDS = 1.0
+
 
 class LiveCapture(PacketSource):
     """Captures packets from a live network interface using Scapy.
@@ -69,12 +72,29 @@ class LiveCapture(PacketSource):
         logger.info("Live capture started on interface=%s filter=%r", self.interface, self.bpf_filter)
         try:
             while True:
-                item = self._queue.get()
+                try:
+                    item = self._queue.get(timeout=_POLL_SECONDS)
+                except queue.Empty:
+                    self._raise_if_sniffer_died()
+                    continue
                 if item is _STOP:
                     break
                 yield item
         finally:
             self.close()
+
+    def _raise_if_sniffer_died(self) -> None:
+        """Surface a dead sniffer thread instead of waiting on an empty queue forever.
+
+        AsyncSniffer swallows setup errors (e.g. no libpcap to compile the BPF
+        filter, missing capture privileges) inside its thread and just stops, so
+        without this the pipeline would sit idle while logging "capture started".
+        """
+        sniffer = self._sniffer
+        error = getattr(sniffer, "exception", None)
+        thread = getattr(sniffer, "thread", None)
+        if error is not None or (thread is not None and not thread.is_alive()):
+            raise RuntimeError(f"Live capture stopped unexpectedly on interface {self.interface!r}: {error}") from error
 
     def close(self) -> None:
         if self._sniffer is not None and getattr(self._sniffer, "running", False):
