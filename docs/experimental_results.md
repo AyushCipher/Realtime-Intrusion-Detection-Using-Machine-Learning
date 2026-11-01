@@ -48,11 +48,11 @@ To uphold the highest academic integrity during faculty review, all numbers in t
 
 ```csv
 Model,Accuracy,Macro Precision,Macro Recall,Macro F1,Weighted F1,Training Time (s),Latency (Median ms),Throughput (flows/s),Model Size (KB)
-Selected: Two-Stage Cascade (IF+XGB),98.38%,0.9964,0.9135,0.9426,0.9827,1.372s,18.575 ms,53.8,3790.9 KB
-Alternative 1: Standalone XGBoost,100.00%,1.0000,1.0000,1.0000,1.0000,1.078s,2.351 ms,425.4,1690.3 KB
-Alternative 2: Random Forest,99.46%,0.9988,0.9286,0.9518,0.9937,0.418s,59.851 ms,16.7,783.3 KB
-Alternative 3: Logistic Regression,98.92%,0.8547,0.8571,0.8559,0.9838,0.056s,0.161 ms,6224.7,4.8 KB
-Alternative 4: Decision Tree,100.00%,1.0000,1.0000,1.0000,1.0000,0.010s,0.086 ms,11695.9,3.5 KB
+Selected: Two-Stage Cascade (IF+XGB),98.38%,0.9964,0.9135,0.9426,0.9827,1.208s,16.352 ms,61.2,3790.9 KB
+Alternative 1: Standalone XGBoost,100.00%,1.0000,1.0000,1.0000,1.0000,0.930s,1.901 ms,526.0,1690.3 KB
+Alternative 2: Random Forest,99.46%,0.9988,0.9286,0.9518,0.9937,0.384s,28.097 ms,35.6,783.3 KB
+Alternative 3: Logistic Regression,98.92%,0.8547,0.8571,0.8559,0.9838,0.082s,0.133 ms,7521.6,4.8 KB
+Alternative 4: Decision Tree,100.00%,1.0000,1.0000,1.0000,1.0000,0.012s,0.050 ms,19841.3,3.5 KB
 ```
 
 ### Analysis of the Alternative Models:
@@ -60,9 +60,9 @@ Alternative 4: Decision Tree,100.00%,1.0000,1.0000,1.0000,1.0000,0.010s,0.086 ms
    - Standalone XGBoost achieves 100% on this known test set. However, it lacks Stage 1 pre-filtering and is **strictly closed-set** (it cannot recognize novel zero-day attacks or calculate `unknown_mass`).
    - The Two-Stage Cascade introduces OpenMax Weibull calibration and conformal budget guarantees, which are essential for real-world enterprise deployment.
 2. **Selected Model vs Random Forest:**
-   - Random Forest achieved 99.46% accuracy, but has the slowest single-flow inference latency (**59.85 ms**, 3.2$\times$ slower than the cascade). Bagging 200 trees per flow without a pre-filter creates an unacceptable latency bottleneck.
+   - Random Forest achieved 99.46% accuracy, but has the slowest single-flow inference latency (**28.10 ms**, about 1.7$\times$ slower than the cascade; 28 to 60 ms across runs). Bagging 200 trees per flow without a pre-filter creates an unacceptable latency bottleneck.
 3. **Selected Model vs Logistic Regression:**
-   - Logistic Regression trained in 0.056s with sub-millisecond inference, but suffers a major penalty on Macro F1 (**85.59%**). Linear hyperplanes cannot separate non-linear combinations of inter-arrival times and TCP flag distributions.
+   - Logistic Regression trained in 0.082s with sub-millisecond inference, but suffers a major penalty on Macro F1 (**85.59%**). Linear hyperplanes cannot separate non-linear combinations of inter-arrival times and TCP flag distributions.
 4. **Selected Model vs Decision Tree:**
    - A single Decision Tree achieved 100% on the synthetic set due to sharp rectangular boundaries, but single trees suffer from notorious variance and catastrophic degradation under real-world traffic drift.
 

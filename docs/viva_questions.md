@@ -18,7 +18,7 @@ Our two-stage architecture addresses this directly:
 **Answer:**
 "We empirically benchmarked Random Forest against our model (see [`results/model_comparison.csv`](file:///c:/Users/ayush/OneDrive/Desktop/Urop%20Project/results/model_comparison.csv)). 
 While Random Forest achieved 99.46% accuracy, it exhibited severe operational disadvantages:
-1. **Inference Latency:** Random Forest took **59.85 ms** per single flow—**over 3.2 times slower** than our Two-Stage Cascade (18.57 ms). In an intrusion detection system processing incoming network queues, a 60ms latency per flow leads to immediate packet drops.
+1. **Inference Latency:** Random Forest took **28.10 ms** per single flow—**about 1.7 times slower** than our Two-Stage Cascade (16.35 ms), and up to 60 ms in other runs. In an intrusion detection system processing incoming network queues, a latency like that per flow leads to immediate packet drops.
 2. **Lack of Pre-Filtering:** Random Forest bags 200 deep decision trees on 100% of packets without an anomaly pre-filter.
 3. **Closed-Set Blindness:** Random Forest uses unweighted tree majority voting. On out-of-distribution zero-day attacks, it produces an overconfident vote for a known class without quantifying unknown mass."
 
@@ -26,7 +26,7 @@ While Random Forest achieved 99.46% accuracy, it exhibited severe operational di
 
 ### Q3: Why not use Logistic Regression for ultra-low latency?
 **Answer:**
-"Logistic Regression is indeed fast (training in 0.056s and scoring in 0.16ms), but it is linear. In network traffic, threat behaviors are characterized by non-linear interactions across multiple dimensions (for example, a high packet count is benign during file downloads, but malicious when paired with a near-zero inter-arrival time and high SYN flag count).
+"Logistic Regression is indeed fast (training in 0.082s and scoring in 0.16ms), but it is linear. In network traffic, threat behaviors are characterized by non-linear interactions across multiple dimensions (for example, a high packet count is benign during file downloads, but malicious when paired with a near-zero inter-arrival time and high SYN flag count).
 Our benchmark proved that Logistic Regression suffered a major performance collapse on Macro F1 (**85.59%** vs. our **94.26%**), missing non-linear and multi-modal attack distributions."
 
 ---
@@ -132,7 +132,7 @@ If the system escalates too often, $\alpha$ decreases, raising the threshold; if
 ### Q16: How did you measure single-flow latency and throughput?
 **Answer:**
 "In `ml/scripts/evaluate_and_compare.py` and `ids_ml.evaluation.latency_report`, we use Python's high-resolution `time.perf_counter()`. 
-To eliminate initialization artifacts (such as C-library loading and memory allocation), we discard the first 50 warm-up runs. We then time 200 individual single-row calls to `detector.score(X[i:i+1])` and record the median, 95th percentile, and 99th percentile times. Our measured median latency is **18.575 ms**, corresponding to 53.8 flows/second in unbatched mode."
+To eliminate initialization artifacts (such as C-library loading and memory allocation), we discard the first 50 warm-up runs. We then time 200 individual single-row calls to `detector.score(X[i:i+1])` and record the median, 95th percentile, and 99th percentile times. Our measured median latency is **16.352 ms**, corresponding to 61.2 flows/second in unbatched mode."
 
 ---
 
@@ -194,13 +194,13 @@ TF-IDF cosine similarity over our curated MITRE ATT&CK knowledge base requires z
 ### Q24: What is the biggest bottleneck in your current architecture?
 **Answer:**
 "Our biggest operational bottleneck is the **Tier-2 LLM reasoning latency and API quota**. 
-While our Tier-1 ML cascade scores flows in 18.5 milliseconds, querying a hosted LLM API takes between 2.6 to 40 seconds per call. On a free-tier API quota, 44% of calls failed due to per-day rate ceilings. This proves empirically that while Tier 1 is real-time, Tier 2 must remain an asynchronous, strictly budgeted triage tool or be replaced by a local quantized model like Llama-3."
+While our Tier-1 ML cascade scores flows in about 16 milliseconds, querying a hosted LLM API takes between 2.6 to 40 seconds per call. On a free-tier API quota, 44% of calls failed due to per-day rate ceilings. This proves empirically that while Tier 1 is real-time, Tier 2 must remain an asynchronous, strictly budgeted triage tool or be replaced by a local quantized model like Llama-3."
 
 ---
 
 ### Q25: If you had another month on this project, what would you prioritize?
 **Answer:**
 "I would prioritize three concrete extensions:
-1. **Micro-batching in Kafka Consumer:** Transitioning the scoring service from single-row calls to micro-batches of 64 flows, which our latency benchmarks prove increases throughput from 53.8 to over 7,000 flows/second.
+1. **Micro-batching in Kafka Consumer:** Transitioning the scoring service from single-row calls to micro-batches of 64 flows, which our latency benchmarks prove increases throughput from 61.2 to over 7,000 flows/second.
 2. **Local Self-Hosted LLM:** Deploying an 8-bit quantized Llama-3-8B model locally via vLLM to eliminate external API rate limits and data privacy concerns.
 3. **Closed-Loop Conformal Feedback:** Connecting the analyst dashboard's triage confirmations (`confirmed` vs. `false_positive`) directly into the online conformal update rule, dynamically tuning the threshold based on verified human feedback."

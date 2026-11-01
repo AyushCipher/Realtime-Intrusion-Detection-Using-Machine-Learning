@@ -117,8 +117,8 @@ In network security, standard classification accuracy is deeply misleading becau
 | **Recall (Macro)** | Of all actual attacks, how many did we catch? | $\frac{TP}{TP + FN}$ | Critical metric: missed attacks (**false negatives**) cause data breaches. | **0.9135** (91.35%) | Catches >91% across all categories; minor drop on rare zero-days. |
 | **F1-Score (Macro)** | Harmonic mean of precision and recall | $2 \cdot \frac{P \cdot R}{P + R}$ | Balanced metric treating rare attacks with equal weight to large floods. | **0.9426** (94.26%) | Exceptional performance across diverse attack classes. |
 | **Weighted F1** | F1 weighted by class sample count | $\sum_c w_c \cdot F1_c$ | Reflects performance on typical traffic distribution. | **0.9827** (98.27%) | High real-world operational effectiveness. |
-| **Single Latency** | Time to score one single flow | Median $\Delta t$ over 200 trials | Must keep pace with live packet streams without queuing delay. | **18.575 ms** | Real-time feasible for flow-level analysis. |
-| **Throughput** | Number of flows processed per second | $1000 / \text{Latency}_{ms}$ | Measures capacity under high packet arrival rates. | **53.8 flows/s** | Adequate for flow records; batching achieves >7,000/s. |
+| **Single Latency** | Time to score one single flow | Median $\Delta t$ over 200 trials | Must keep pace with live packet streams without queuing delay. | **16.352 ms** | Real-time feasible for flow-level analysis. |
+| **Throughput** | Number of flows processed per second | $1000 / \text{Latency}_{ms}$ | Measures capacity under high packet arrival rates. | **61.2 flows/s** | Adequate for flow records; batching achieves >7,000/s. |
 | **Model Size** | Serialized footprint on disk | File size of `.joblib` | Determines RAM requirements for container deployment. | **3,790.9 KB** (~3.7 MB) | Lightweight; runs easily in low-resource edge gateways. |
 
 ---

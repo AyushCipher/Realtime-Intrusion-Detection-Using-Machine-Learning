@@ -126,13 +126,13 @@ To provide **rigorous experimental proof** defending our choice, we implemented 
 | **Macro F1-Score** | **0.9426** | 1.0000 | 0.9518 | 0.8559 | 1.0000 |
 | **Weighted F1-Score**| **0.9827** | 1.0000 | 0.9937 | 0.9838 | 1.0000 |
 | **Training Time (s)**| 1.372 s | 1.078 s | 0.418 s | 0.056 s | 0.010 s |
-| **Single Latency (Median)** | 18.575 ms | 2.351 ms | 59.851 ms | 0.161 ms | 0.086 ms |
-| **Throughput (flows/s)** | 53.8 flows/s | 425.4 flows/s | 16.7 flows/s | 6,224.7 flows/s | 11,695.9 flows/s |
+| **Single Latency (Median)** | 16.352 ms | 1.901 ms | 28.097 ms | 0.133 ms | 0.050 ms |
+| **Throughput (flows/s)** | 61.2 flows/s | 526.0 flows/s | 35.6 flows/s | 7,521.6 flows/s | 19,841.3 flows/s |
 | **Model Size on Disk** | 3,790.9 KB (~3.7 MB) | 1,690.3 KB (~1.7 MB)| 783.3 KB | 4.8 KB | 3.5 KB |
 | **Interpretability** | **High** (TreeSHAP per-flow attribution + Stage 1 score) | **High** (TreeSHAP attribution) | **Moderate** (Gini feature importances) | **Very High** (Linear weights per feature) | **High** (Direct IF-THEN tree paths) |
 | **Zero-Day / Open-Set Escalation** | **Yes** (Native OpenMax + Conformal Gate) | **No** (Closed-set overconfident) | **No** (Closed-set voting) | **No** (Closed-set softmax) | **No** (Brittle leaf assignments) |
 | **Key Strengths** | Bounded pipeline cost, anomaly pre-filtering, zero-day detection via conformal escalation, native TreeSHAP | Highest multi-class classification accuracy, powerful non-linear feature splits | Robust ensemble averaging, low variance, resistant to tabular overfitting | Ultra-fast training and inference, minimal memory footprint | Extremely fast, simple rule inspection |
-| **Key Limitations** | Attack recall on rare classes bounded by Stage 1 pre-filter recall | Evaluates heavy model on 100% of packets; blind to novel zero-day attacks | Slowest single-sample latency (59.8 ms); no native zero-day escalation | Poor separation on complex non-linear attack distributions (Macro F1 = 85.59%) | Severe overfitting risk; brittle to slight packet distribution shifts |
+| **Key Limitations** | Attack recall on rare classes bounded by Stage 1 pre-filter recall | Evaluates heavy model on 100% of packets; blind to novel zero-day attacks | Slowest single-sample latency (28.1 ms; up to 60 ms in other runs); no native zero-day escalation | Poor separation on complex non-linear attack distributions (Macro F1 = 85.59%) | Severe overfitting risk; brittle to slight packet distribution shifts |
 
 *All results measured and recorded in `results/model_comparison.csv` and `results/metrics.json`.*
 

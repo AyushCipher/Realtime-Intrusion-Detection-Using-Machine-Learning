@@ -7,12 +7,12 @@
     "weighted_precision": 0.9842,
     "weighted_recall": 0.9838,
     "weighted_f1": 0.9827,
-    "training_time_seconds": 1.3722,
+    "training_time_seconds": 1.208,
     "latency": {
-      "median_ms": 18.5751,
-      "p95_ms": 33.8733,
-      "p99_ms": 35.758,
-      "throughput_fps": 53.8
+      "median_ms": 16.3523,
+      "p95_ms": 30.8049,
+      "p99_ms": 33.3556,
+      "throughput_fps": 61.2
     },
     "model_size_kb": 3790.9,
     "per_class": {
@@ -74,12 +74,12 @@
     "weighted_precision": 1.0,
     "weighted_recall": 1.0,
     "weighted_f1": 1.0,
-    "training_time_seconds": 1.0782,
+    "training_time_seconds": 0.9297,
     "latency": {
-      "median_ms": 2.3507,
-      "p95_ms": 3.8165,
-      "p99_ms": 6.2807,
-      "throughput_fps": 425.4
+      "median_ms": 1.901,
+      "p95_ms": 2.3397,
+      "p99_ms": 2.4728,
+      "throughput_fps": 526.0
     },
     "model_size_kb": 1690.3,
     "per_class": {
@@ -141,12 +141,12 @@
     "weighted_precision": 0.9946,
     "weighted_recall": 0.9946,
     "weighted_f1": 0.9937,
-    "training_time_seconds": 0.4175,
+    "training_time_seconds": 0.3841,
     "latency": {
-      "median_ms": 59.8506,
-      "p95_ms": 81.8275,
-      "p99_ms": 90.293,
-      "throughput_fps": 16.7
+      "median_ms": 28.0974,
+      "p95_ms": 41.7916,
+      "p99_ms": 45.7039,
+      "throughput_fps": 35.6
     },
     "model_size_kb": 783.3,
     "per_class": {
@@ -208,12 +208,12 @@
     "weighted_precision": 0.9786,
     "weighted_recall": 0.9892,
     "weighted_f1": 0.9838,
-    "training_time_seconds": 0.0564,
+    "training_time_seconds": 0.0821,
     "latency": {
-      "median_ms": 0.1607,
-      "p95_ms": 0.308,
-      "p99_ms": 0.4349,
-      "throughput_fps": 6224.7
+      "median_ms": 0.133,
+      "p95_ms": 0.1982,
+      "p99_ms": 0.316,
+      "throughput_fps": 7521.6
     },
     "model_size_kb": 4.8,
     "per_class": {
@@ -275,12 +275,12 @@
     "weighted_precision": 1.0,
     "weighted_recall": 1.0,
     "weighted_f1": 1.0,
-    "training_time_seconds": 0.0103,
+    "training_time_seconds": 0.0125,
     "latency": {
-      "median_ms": 0.0855,
-      "p95_ms": 0.2472,
-      "p99_ms": 0.3958,
-      "throughput_fps": 11695.9
+      "median_ms": 0.0504,
+      "p95_ms": 0.0639,
+      "p99_ms": 0.1214,
+      "throughput_fps": 19841.3
     },
     "model_size_kb": 3.5,
     "per_class": {

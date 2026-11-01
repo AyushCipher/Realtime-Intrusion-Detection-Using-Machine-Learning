@@ -143,9 +143,9 @@ Import-Csv results/model_comparison.csv | Select-Object Model, Accuracy, "Macro 
 **Say to Sir:**
 > "Here is our comparative defense against alternatives:
 > - Standalone XGBoost and Decision Trees scored 100% on this closed-set test, but they are closed-set: when novel zero-day attacks hit the network, they blindly misclassify without escalation.
-> - Random Forest had an unacceptable single-flow latency of 59.85 ms—more than three times slower than our cascade.
+> - Random Forest had an unacceptable single-flow latency of 28.10 ms—roughly 1.7 times slower than our cascade (and 28 to 60 ms across runs).
 > - Logistic Regression is fast but suffered an 85.59% Macro F1 due to non-linear network patterns.
-> Our Two-Stage Cascade is the optimal real-world compromise: 98.38% accuracy, 18.5ms latency, native TreeSHAP explainability, and mathematically bounded zero-day escalation."
+> Our Two-Stage Cascade is the optimal real-world compromise: 98.38% accuracy, about 16 ms latency, native TreeSHAP explainability, and mathematically bounded zero-day escalation."
 
 ---
 

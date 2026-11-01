@@ -92,7 +92,7 @@ flowchart TD
 |---|---|---|
 | **Packet Capture** | Replaying verified PCAP files (`sample_tcp.pcap`) into Kafka | Live promiscuous packet capture using kernel-bypass (DPDK / eBPF / AF_XDP) |
 | **Kafka Clustering** | Single-broker KRaft Kafka container | Multi-broker distributed Kafka cluster with partition replication factor $\ge 3$ |
-| **Tier-1 Batching** | Single-flow sequential scoring (53.8 flows/s) | Micro-batched vector scoring (achieving >7,000 flows/s as benchmarked) |
+| **Tier-1 Batching** | Single-flow sequential scoring (61.2 flows/s) | Micro-batched vector scoring (achieving >7,000 flows/s as benchmarked) |
 | **Escalation Reasoner** | Hosted LLM API (Anthropic Claude / Gemini) with TF-IDF RAG | Local quantized LLM (e.g., Llama-3-8B-Instruct via vLLM) with vector DB (Qdrant) |
 | **Online Adaptation** | Opt-in Adaptive Conformal Inference (ACI) with triage audit | Closed-loop automated feedback updating $\alpha_t$ directly from verified analyst triage |
 | **Storage Engine** | SQLite database with auto-migrating schema | Distributed PostgreSQL / TimescaleDB with partitioned time-series tables |
