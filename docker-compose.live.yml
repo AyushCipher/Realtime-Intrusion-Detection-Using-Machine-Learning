@@ -1,0 +1,28 @@
+# Live-capture override. Use on top of the base stack:
+#
+#   docker compose -f docker-compose.yml -f docker-compose.live.yml up -d --build
+#
+# ingestion sniffs its container's eth0 (real packets, not a pcap replay), and
+# traffic-gen shares ingestion's network namespace so the traffic it produces
+# against dashboard-api is genuinely seen on that interface. Kafka's own port
+# is excluded from the capture so ingestion does not sniff its own output.
+services:
+  ingestion:
+    cap_add:
+      - NET_RAW
+      - NET_ADMIN
+    environment:
+      INGESTION_INTERFACE: "eth0"
+      INGESTION_BPF_FILTER: "(tcp or udp) and not port 9092"
+      INGESTION_IDLE_TIMEOUT: "5"
+      INGESTION_ACTIVE_TIMEOUT: "15"
+
+  traffic-gen:
+    image: python:3.11-slim
+    network_mode: "service:ingestion"
+    depends_on:
+      - dashboard-api
+    volumes:
+      - ./integration/live_traffic_gen.py:/app/live_traffic_gen.py:ro
+    command: ["python", "/app/live_traffic_gen.py", "--target", "dashboard-api", "--port", "8000"]
+    restart: "no"
