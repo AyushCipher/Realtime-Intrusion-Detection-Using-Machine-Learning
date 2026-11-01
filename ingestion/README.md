@@ -175,9 +175,11 @@ against itself.
   are exposed via `BufferedProducer.stats()` but are not currently exported
   to any metrics system -- that's left to the operational layer.
 - **Live capture needs OS-level privileges and drivers** (Npcap/libpcap),
-  which are outside this module's control and not covered by its test
-  suite; only `PcapReplay` and the flow/feature/producer logic are exercised
-  by the unit tests in `tests/`.
+  which are outside this module's control. The unit tests cover `PcapReplay`,
+  the flow/feature/producer logic, and `LiveCapture`'s dead-sniffer detection.
+  An end-to-end live run inside Docker (`docker-compose.live.yml`) is
+  documented in [`docs/live_capture_test.md`](../docs/live_capture_test.md);
+  capture directly on a Windows host has not been tested.
 
 ## Out of scope
 
