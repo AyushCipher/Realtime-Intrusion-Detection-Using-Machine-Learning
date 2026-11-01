@@ -25,3 +25,8 @@ models/
 # process (a file watcher/IDE) at restructuring time and could not be
 # deleted. Safe to remove by hand once nothing has it open.
 /frontend/
+
+# Local presentation material (slides and speaker scripts) is not part of the
+# codebase; keep it out of commits.
+*.pptx
+PRESENTATION_SCRIPT*
