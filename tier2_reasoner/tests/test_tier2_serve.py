@@ -53,3 +53,19 @@ def test_stub_llm_is_never_wrapped_even_with_retry_flags_set():
     args = parse_args(["--llm", "stub", "--max-retries", "10"])
     client = build_llm_client(args)
     assert isinstance(client, StubLLMClient)
+
+
+def test_ollama_llm_is_wrapped_in_retry_and_points_at_the_given_host():
+    from ids_tier2.llm_client import OllamaLLMClient
+    from ids_tier2.retry import RetryingLLMClient
+
+    args = parse_args(["--llm", "ollama", "--ollama-host", "http://host.docker.internal:11434", "--ollama-model", "m"])
+    client = build_llm_client(args)
+    assert isinstance(client, RetryingLLMClient)
+    assert isinstance(client.inner, OllamaLLMClient)
+    assert client.inner.host == "http://host.docker.internal:11434" and client.inner.model == "m"
+
+
+def test_deployed_retrieval_mode_defaults_to_auto_and_is_selectable():
+    assert parse_args([]).retrieval_mode == "auto"
+    assert parse_args(["--retrieval-mode", "class"]).retrieval_mode == "class"

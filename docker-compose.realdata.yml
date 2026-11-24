@@ -1,0 +1,37 @@
+# Real-data deployment override. Use on top of the base stack (and
+# optionally the live-capture override):
+#
+#   docker compose -f docker-compose.yml -f docker-compose.realdata.yml up -d --build
+#
+# ml: instead of the demo model trained on the synthetic fixture, trains the
+# deployment configuration (hybrid Stage 1 with conformal recall control,
+# kNN escalation gate, adaptive escalation threshold, both stages calibrated
+# jointly for a 5% end-to-end miss budget) on real, cleaned,
+# canonical-form CSVs from the host folder below, on first start. The model is
+# cached in the ml_site_models volume; ML_RETRAIN=1 forces a retrain. The real
+# datasets are not in the repository (size, licences); build the combined
+# training file with the scripts in ml/scripts (see docs/real_data_findings.md).
+#
+# tier2-reasoner: a local open-weights LLM via Ollama on the host (no key, no
+# quota), with behaviour-keyed retrieval for escalated alerts. Start Ollama on
+# the host and pull the model first: `ollama pull llama3.2:1b`.
+services:
+  ml:
+    environment:
+      ML_TRAIN_DATA: "/data/site_train_combined.csv"
+      ML_GATE: "knn"  # best on unseen families; "fused" trades some of that for variants (results/paper/fused_gate)
+    volumes:
+      - "${NIDS_DATA_DIR:-C:/nids_data}:/data:ro"
+      - ml_site_models:/app/site_models
+
+  tier2-reasoner:
+    environment:
+      TIER2_LLM: "ollama"
+      TIER2_RETRIEVAL_MODE: "auto"
+      OLLAMA_HOST_URL: "http://host.docker.internal:11434"
+      OLLAMA_MODEL: "llama3.2:1b"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+
+volumes:
+  ml_site_models:

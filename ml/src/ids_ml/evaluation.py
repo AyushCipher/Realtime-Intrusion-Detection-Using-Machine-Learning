@@ -251,7 +251,7 @@ def _fit_gate(gate_name: str, stage2: AttackClassifier, X_fit, y_fit, seed: int 
         return SoftmaxGate(stage2)
     if gate_name == "openset":
         return OpenMaxHead(stage2, OpenMaxConfig()).fit(X_fit, y_fit)
-    if gate_name in ("knn", "efc"):
+    if gate_name in ("knn", "efc", "fused"):
         return OOD_GATES[gate_name](stage2, random_state=seed).fit(X_fit, y_fit)
     if gate_name in OOD_GATES:
         return OOD_GATES[gate_name](stage2).fit(X_fit, y_fit)

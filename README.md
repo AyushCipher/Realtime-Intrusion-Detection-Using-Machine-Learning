@@ -116,6 +116,36 @@ actually ran, not just that the containers started.
 Tear down with `docker compose down` (add `-v` to also drop the Kafka and
 alert-history volumes).
 
+### Real-data mode with a real LLM
+
+The default stack is a demo: its model is trained on the synthetic fixture
+and Tier 2 uses a stub LLM. `docker-compose.realdata.yml` runs the
+configuration the real-traffic experiments support
+([docs/real_data_findings.md](docs/real_data_findings.md)):
+
+- **ml** trains on real, cleaned, canonical-form CSVs from a host folder
+  (`NIDS_DATA_DIR`, default `C:/nids_data`; the datasets are not in this
+  repository) on first start. It uses a hybrid Stage 1, the kNN escalation
+  gate (the best measured on attack families never seen in training), an
+  adaptive escalation threshold, and joint calibration of both stages so the
+  end-to-end miss rate on known attack families is held at 5%.
+  `ML_GATE=fused` swaps in a gate that also uses softmax uncertainty: better
+  on new variants of known families, worse on entirely new ones
+  (`results/paper/fused_gate/`).
+- **tier2-reasoner** uses a local open-weights LLM through
+  [Ollama](https://ollama.com) on the host (no key, no quota) and
+  behaviour-keyed ATT&CK retrieval for escalated alerts.
+
+```
+ollama pull llama3.2:1b
+docker compose -f docker-compose.yml -f docker-compose.realdata.yml up -d --build
+python integration/test_tier2_live.py
+```
+
+`test_tier2_live.py` passes only if real-LLM explanations of escalated
+alerts reach the dashboard API. Set `TIER2_LLM=gemini` and `GEMINI_API_KEY`
+in a gitignored `.env` file to use a hosted model instead.
+
 ## How the modules communicate
 
 Exactly two Kafka topics, both JSON, both documented field-by-field with

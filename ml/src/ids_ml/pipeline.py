@@ -118,12 +118,20 @@ class TwoStageDetector:
         gate: Optional[Any] = None,
         escalation_gate: Optional[ConformalGate] = None,
         escalation_trigger_name: str = "",
+        benign_silence_threshold: Optional[float] = None,
     ) -> None:
         self.stage1 = stage1
         self.stage2 = stage2
         self.gate = gate
         self.escalation_gate = escalation_gate
         self.escalation_trigger_name = escalation_trigger_name
+        # None: a flagged flow Stage 2 calls BENIGN is passed silently (argmax
+        # rule). A float u2: it is passed silently only if P(BENIGN) >= u2;
+        # otherwise it is raised as the most likely attack class. Set by
+        # joint end-to-end calibration (cascade_crc.py via train.py
+        # --joint-miss-budget), which bounds the CASCADE's miss rate rather
+        # than Stage 1's alone.
+        self.benign_silence_threshold = benign_silence_threshold
 
     def score(self, X: np.ndarray) -> List[ScoredFlow]:
         n = X.shape[0]
@@ -164,6 +172,17 @@ class TwoStageDetector:
                         escalated = self.escalation_gate.update(unknown_mass)
                     elif self.escalation_gate is not None and self.escalation_gate.should_escalate(unknown_mass):
                         escalated = True
+
+                if (
+                    not escalated
+                    and predicted_class == "BENIGN"
+                    and self.benign_silence_threshold is not None
+                    and class_probs.get("BENIGN", 1.0) < self.benign_silence_threshold
+                ):
+                    attack_classes = {c: p for c, p in class_probs.items() if c != "BENIGN"}
+                    if attack_classes:
+                        predicted_class = max(attack_classes, key=attack_classes.get)
+                        confidence = attack_classes[predicted_class]
 
                 decision = "escalated" if escalated else ("known-benign" if predicted_class == "BENIGN" else "known-attack")
 

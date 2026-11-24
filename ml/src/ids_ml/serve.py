@@ -18,6 +18,7 @@ re-specified.
 from __future__ import annotations
 
 import argparse
+import json
 import logging
 import sys
 from pathlib import Path
@@ -35,8 +36,16 @@ from .softmax_gate import SoftmaxGate
 from .stage1_hybrid import load_stage1
 from .stage1_iforest import AnomalyPreFilter  # noqa: F401 - kept for callers importing it from here
 from .stage2_xgboost import AttackClassifier
-from .ood_gates import KNNGate
-from .train import ESCALATION_GATE_FILENAME, ESCALATION_KIND_FILENAME, GATE_TYPE_FILENAME, KNN_GATE_FILENAME, OPENSET_GATE_FILENAME
+from .ood_gates import FusedGate, KNNGate
+from .train import (
+    ESCALATION_GATE_FILENAME,
+    ESCALATION_KIND_FILENAME,
+    CASCADE_CALIBRATION_FILENAME,
+    FUSED_GATE_FILENAME,
+    GATE_TYPE_FILENAME,
+    KNN_GATE_FILENAME,
+    OPENSET_GATE_FILENAME,
+)
 
 logger = logging.getLogger("ids_ml.serve")
 
@@ -56,6 +65,8 @@ def load_gate(model_dir: Path, stage2: AttackClassifier):
         gate = SoftmaxGate(stage2)
     elif gate_type == "knn":
         gate = KNNGate.load(model_dir / KNN_GATE_FILENAME, stage2)
+    elif gate_type == "fused":
+        gate = FusedGate.load(model_dir / FUSED_GATE_FILENAME, stage2)
     else:
         raise ValueError(f"unknown gate type in {gate_type_path}: {gate_type!r}")
 
@@ -116,8 +127,19 @@ def main(argv=None) -> int:
             escalation_gate.threshold,
             escalation_gate.budget,
         )
+    benign_silence_threshold = None
+    cascade_path = model_dir / CASCADE_CALIBRATION_FILENAME
+    if cascade_path.exists():
+        cascade = json.loads(cascade_path.read_text())
+        benign_silence_threshold = float(cascade["benign_silence_threshold"])
+        logger.info("Loaded joint cascade calibration: %s", cascade)
     detector = TwoStageDetector(
-        stage1, stage2, gate=gate, escalation_gate=escalation_gate, escalation_trigger_name=escalation_trigger_name
+        stage1,
+        stage2,
+        gate=gate,
+        escalation_gate=escalation_gate,
+        escalation_trigger_name=escalation_trigger_name,
+        benign_silence_threshold=benign_silence_threshold,
     )
     explainer = ShapExplainer(stage2)
 

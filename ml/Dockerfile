@@ -17,13 +17,16 @@ ENV PYTHONPATH=/app/src
 # CICIDS2017/2018 data). This is a demo-quality model, not a production one
 # -- see the top-level README's known-limitations section.
 #
-# --gate openset fits and calibrates the OpenMax escalation gate (see
-# ml/README.md's "Open-set escalation" section) so this demo actually
-# produces escalated: true alerts for tier2_reasoner to consume, instead
-# of running the closed-set-only cascade. --escalation-budget 0.1 matches
-# the budget used throughout this project's H1/H2 evaluation.
-RUN python -m ids_ml.train --data /app/training_data.csv --model-dir /app/models \
-    --stage1-contamination 0.35 --skip-leakage-check --skip-robustness-probe \
-    --gate openset --escalation-budget 0.1
+# The deployment configuration found best on real traffic
+# (docs/real_data_findings.md): hybrid Stage 1 with conformal recall
+# calibration, the kNN escalation gate (best on unseen attack families;
+# results/paper/fused_gate/), an adaptive escalation threshold, and joint
+# calibration of both stages for a 5% end-to-end miss budget, so the demo
+# produces escalated alerts for tier2_reasoner. --escalation-budget 0.1
+# matches the budget used throughout this project's evaluation. To train it
+# on real data instead, see docker-compose.realdata.yml.
+RUN python -m ids_ml.train --data /app/training_data.csv --model-dir /app/models --split random \
+    --stage1-kind hybrid --skip-leakage-check --skip-robustness-probe \
+    --gate knn --adaptive-escalation --escalation-budget 0.1 --joint-miss-budget 0.05
 
 ENTRYPOINT ["/app/docker-entrypoint.sh"]

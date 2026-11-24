@@ -251,6 +251,83 @@ class KNNGate:
         return gate
 
 
+class FusedGate:
+    """Novelty score = max of two percentiles: the kNN distance and Stage 2's
+    softmax uncertainty (1 - max probability), each ranked against a held-out
+    reference sample of known training flows.
+
+    Why: which gate is best depends on what "unknown" means. For an entirely
+    new attack family the kNN distance escalated twice as many flows as any
+    confidence-based gate (docs/real_data_findings.md section 4); for a new
+    VARIANT of a known family, softmax confidence was best and kNN weak
+    (section 8). Taking the larger percentile escalates a flow if EITHER view
+    finds it unusual, the same max-of-percentiles fusion the hybrid Stage 1
+    uses. It is still one score, so a conformal threshold on it keeps the
+    escalation budget exactly as for any other gate.
+
+    The kNN reference set and the percentile reference are disjoint (an 80/20
+    split of the fitting data), so a reference flow is never scored against
+    itself.
+    """
+
+    bounded_score = False
+
+    def __init__(self, classifier, reference_fraction: float = 0.2, random_state: int = 0) -> None:
+        self.classifier = classifier
+        self.reference_fraction = reference_fraction
+        self.random_state = random_state
+        self.knn: Optional[KNNGate] = None
+        self._ref_knn: Optional[np.ndarray] = None
+        self._ref_soft: Optional[np.ndarray] = None
+
+    def _soft(self, X: np.ndarray) -> np.ndarray:
+        return 1.0 - self.classifier.predict_proba(X).max(axis=1)
+
+    @staticmethod
+    def _ecdf(ref_sorted: np.ndarray, v: np.ndarray) -> np.ndarray:
+        return np.searchsorted(ref_sorted, v, side="right") / len(ref_sorted)
+
+    def fit(self, X_fit: np.ndarray, y_fit: Sequence[str]) -> "FusedGate":
+        X_fit = np.asarray(X_fit)
+        y_fit = np.asarray(list(y_fit))
+        idx = np.random.default_rng(self.random_state).permutation(len(X_fit))
+        n_ref = max(1, int(len(X_fit) * self.reference_fraction))
+        ref, rest = idx[:n_ref], idx[n_ref:]
+        self.knn = KNNGate(self.classifier, random_state=self.random_state).fit(X_fit[rest], y_fit[rest])
+        self._ref_knn = np.sort(self.knn.scores(X_fit[ref]))
+        self._ref_soft = np.sort(self._soft(X_fit[ref]))
+        return self
+
+    def scores(self, X: np.ndarray) -> np.ndarray:
+        if self.knn is None:
+            raise RuntimeError("FusedGate must be fit() before use")
+        if len(X) == 0:
+            return np.array([])
+        return np.maximum(self._ecdf(self._ref_knn, self.knn.scores(X)), self._ecdf(self._ref_soft, self._soft(X)))
+
+    def recalibrate_batch(self, X: np.ndarray) -> List[GateResult]:
+        if len(X) == 0:
+            return []
+        return _results(self.classifier, X, self.scores(X))
+
+    def save(self, path) -> None:
+        if self.knn is None:
+            raise RuntimeError("FusedGate must be fit() before use")
+        joblib.dump({"reference_fraction": self.reference_fraction, "random_state": self.random_state,
+                     "knn_scaler": self.knn.scaler, "knn_nn": self.knn._nn, "knn_k": self.knn.k,
+                     "knn_max_reference": self.knn.max_reference,
+                     "ref_knn": self._ref_knn, "ref_soft": self._ref_soft}, path)
+
+    @classmethod
+    def load(cls, path, classifier) -> "FusedGate":
+        p = joblib.load(path)
+        gate = cls(classifier, reference_fraction=p["reference_fraction"], random_state=p["random_state"])
+        gate.knn = KNNGate(classifier, k=p["knn_k"], max_reference=p["knn_max_reference"], random_state=p["random_state"])
+        gate.knn.scaler, gate.knn._nn = p["knn_scaler"], p["knn_nn"]
+        gate._ref_knn, gate._ref_soft = p["ref_knn"], p["ref_soft"]
+        return gate
+
+
 class EFCGate:
     """Novelty score from a reimplemented multi-class Energy-based Flow Classifier
     (Souza et al., arXiv:2109.11224; see efc.py): min over known classes of the
@@ -289,4 +366,5 @@ OOD_GATES = {
     "mahalanobis": MahalanobisGate,
     "knn": KNNGate,
     "efc": EFCGate,
+    "fused": FusedGate,
 }

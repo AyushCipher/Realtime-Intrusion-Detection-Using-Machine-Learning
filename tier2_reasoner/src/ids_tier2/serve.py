@@ -32,7 +32,7 @@ import sys
 
 from .alert_consumer import KafkaEscalatedAlertSource, StubEscalatedAlertSource
 from .explanation_producer import KafkaExplanationProducer, StubExplanationProducer
-from .llm_client import AnthropicLLMClient, GeminiLLMClient, LLMClient, StubLLMClient
+from .llm_client import AnthropicLLMClient, GeminiLLMClient, LLMClient, OllamaLLMClient, StubLLMClient
 from .reasoner import Tier2Reasoner
 from .retry import RetryingLLMClient
 from .schema import ALERT_TOPIC, EXPLANATION_TOPIC
@@ -47,10 +47,20 @@ def parse_args(argv=None) -> argparse.Namespace:
     parser.add_argument("--alert-topic", default=ALERT_TOPIC)
     parser.add_argument("--explanation-topic", default=EXPLANATION_TOPIC)
     parser.add_argument("--use-stub", action="store_true", help="Use in-memory stubs instead of Kafka")
-    parser.add_argument("--llm", choices=["stub", "anthropic", "gemini"], default="stub")
+    parser.add_argument("--llm", choices=["stub", "anthropic", "gemini", "ollama"], default="stub")
+    parser.add_argument("--ollama-model", default="llama3.2:1b", help="Local open-weights model served by Ollama")
+    parser.add_argument("--ollama-host", default="http://localhost:11434")
     parser.add_argument("--anthropic-model", default="claude-sonnet-5")
     parser.add_argument("--gemini-model", default="gemini-3.6-flash")
     parser.add_argument("--no-rag", action="store_true", help="Disable retrieval (bare-LLM ablation)")
+    parser.add_argument(
+        "--retrieval-mode",
+        choices=["class", "behaviour", "auto"],
+        default="auto",
+        help="auto (default): key retrieval on the flow's behaviour for escalated or BENIGN-predicted alerts, whose "
+        "predicted class is usually wrong, and on the class otherwise. On real escalated alerts class-keyed retrieval "
+        "led the LLM to 0/100 correct techniques and behaviour-keyed to 34/97 (docs/real_data_findings.md, 7a, 11)",
+    )
     parser.add_argument("--top-k", type=int, default=3, help="Retrieved technique count when RAG is enabled")
     parser.add_argument("--no-retry", action="store_true", help="Disable RetryingLLMClient (real clients only)")
     parser.add_argument("--max-retries", type=int, default=4)
@@ -71,6 +81,8 @@ def build_llm_client(args: argparse.Namespace) -> LLMClient:
         real_client: LLMClient = AnthropicLLMClient(model=args.anthropic_model)
     elif args.llm == "gemini":
         real_client = GeminiLLMClient(model=args.gemini_model)
+    elif args.llm == "ollama":
+        real_client = OllamaLLMClient(model=args.ollama_model, host=args.ollama_host)
     else:
         return StubLLMClient()
 
@@ -93,7 +105,7 @@ def main(argv=None) -> int:
 
     llm_client = build_llm_client(args)
 
-    reasoner = Tier2Reasoner(llm_client, use_rag=not args.no_rag, top_k=args.top_k)
+    reasoner = Tier2Reasoner(llm_client, use_rag=not args.no_rag, top_k=args.top_k, retrieval_mode=args.retrieval_mode)
 
     bootstrap_servers = [s.strip() for s in args.bootstrap_servers.split(",")]
     if args.use_stub:

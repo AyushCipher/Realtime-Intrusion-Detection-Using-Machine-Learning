@@ -28,6 +28,7 @@ import logging
 import sys
 from pathlib import Path
 
+import numpy as np
 import pandas as pd
 
 from .adaptive_conformal_gate import AdaptiveConformalGate
@@ -37,9 +38,9 @@ from .evaluation import adversarial_robustness_report, leakage_comparison_report
 from .features import CANONICAL_FEATURE_COLUMNS
 from .openset_head import OpenMaxConfig, OpenMaxHead
 from .pipeline import TwoStageDetector
-from .ood_gates import KNNGate
+from .ood_gates import FusedGate, KNNGate
 from .softmax_gate import SoftmaxGate
-from .split import time_based_split
+from .split import random_split, time_based_split
 from .conformal_stage1 import calibrate_stage1_threshold
 from .stage1_hybrid import HybridConfig, HybridPreFilter
 from .stage1_iforest import AnomalyPreFilter, Stage1Config
@@ -50,6 +51,8 @@ logger = logging.getLogger("ids_ml.train")
 GATE_TYPE_FILENAME = "gate_type.txt"
 OPENSET_GATE_FILENAME = "openset_gate.joblib"
 KNN_GATE_FILENAME = "knn_gate.joblib"
+FUSED_GATE_FILENAME = "fused_gate.joblib"
+CASCADE_CALIBRATION_FILENAME = "cascade_calibration.json"  # written by --joint-miss-budget
 ESCALATION_GATE_FILENAME = "escalation_gate.joblib"
 ESCALATION_KIND_FILENAME = "escalation_kind.txt"  # "static" | "adaptive"; absent means "static" (pre-dates this file)
 
@@ -67,6 +70,51 @@ def _load_training_data(paths) -> pd.DataFrame:
             df["is_attack"] = df["attack_category"] != "BENIGN"
         return df.sort_values("timestamp").reset_index(drop=True)
     return load_and_map(paths)
+
+def _calibrate_cascade_jointly(args, val, stage1, stage2, gate, escalation_gate, model_dir: Path) -> None:
+    """Split the validation data into shaping and calibration halves, run the
+    cost-aware joint conformal risk control of cascade_crc.py, apply the chosen
+    Stage 1 threshold and save both thresholds for serve.py."""
+    import json
+
+    from .cascade_crc import CascadeScores, CostAwareJointCRC, evaluate
+
+    if "BENIGN" not in stage2.classes_:
+        raise ValueError("--joint-miss-budget needs BENIGN among Stage 2's classes")
+    benign_idx = stage2.classes_.index("BENIGN")
+    threshold = float(escalation_gate.threshold)
+
+    def scores(part: pd.DataFrame) -> CascadeScores:
+        X = part[CANONICAL_FEATURE_COLUMNS].to_numpy()
+        proba = stage2.predict_proba(X)
+        novelty = gate.scores(X) if hasattr(gate, "scores") else np.array([r.unknown_mass for r in gate.recalibrate_batch(X)])
+        return CascadeScores(stage1.anomaly_score(X), proba[:, benign_idx], proba.argmax(axis=1) == benign_idx, novelty > threshold)
+
+    shuffled = val.sample(frac=1.0, random_state=0)
+    half = len(shuffled) // 2
+    shaping, calib = shuffled.iloc[:half], shuffled.iloc[half:]
+    sh_att, sh_ben = scores(shaping[shaping["is_attack"]]), scores(shaping[~shaping["is_attack"]])
+    cal_att = scores(calib[calib["is_attack"]])
+    if len(sh_att.s1) == 0 or len(cal_att.s1) == 0:
+        raise ValueError("--joint-miss-budget needs attack flows in both halves of the validation split")
+    decision = CostAwareJointCRC(sh_att, sh_ben).calibrate(cal_att, args.joint_miss_budget)
+
+    stage1.config.flag_threshold = decision.t1
+    stage1.save(model_dir / "stage1_iforest.joblib")
+    calib_all = scores(calib)
+    check = evaluate(decision, calib_all, calib["is_attack"].to_numpy())
+    payload = {
+        "joint_miss_budget": args.joint_miss_budget,
+        "stage1_flag_threshold": decision.t1,
+        "benign_silence_threshold": decision.u2,
+        "n_shaping_attacks": int(len(sh_att.s1)),
+        "n_calibration_attacks": int(len(cal_att.s1)),
+        "calibration_end_to_end_miss": check["end_to_end_miss"],
+        "calibration_benign_alert_rate": check["benign_alert_rate"],
+    }
+    (model_dir / CASCADE_CALIBRATION_FILENAME).write_text(json.dumps(payload, indent=2))
+    logger.info("Joint cascade calibration: %s", payload)
+
 
 def parse_args(argv=None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Train the ids_ml two-stage detector")
@@ -93,11 +141,19 @@ def parse_args(argv=None) -> argparse.Namespace:
         help="If set, calibrate Stage 1's flag threshold on validation attack flows so a known attack is "
         "passed as benign with probability <= this budget (see conformal_stage1.py)",
     )
+    parser.add_argument(
+        "--split",
+        choices=["time", "random"],
+        default="time",
+        help="time (default): chronological train/val/test, for honest evaluation on one network's traffic. random: a "
+        "seeded shuffle, for a DEPLOYMENT model trained on several datasets recorded in different years, where a "
+        "time split would put whole datasets into train or test",
+    )
     parser.add_argument("--skip-leakage-check", action="store_true")
     parser.add_argument("--skip-robustness-probe", action="store_true")
     parser.add_argument(
         "--gate",
-        choices=["none", "softmax", "openset", "knn"],
+        choices=["none", "softmax", "openset", "knn", "fused"],
         default="none",
         help="Fit an open-set escalation gate and save it alongside the models (default: none, closed-set only). "
         "knn (distance to the k-th nearest training flow) escalated about twice as many unseen-family flows as "
@@ -114,6 +170,15 @@ def parse_args(argv=None) -> argparse.Namespace:
             "module docstring -- read that before using this outside a demo/prototype deployment."
         ),
     )
+    parser.add_argument(
+        "--joint-miss-budget",
+        type=float,
+        default=None,
+        help="Calibrate Stage 1 and Stage 2 TOGETHER so the cascade's end-to-end known-attack miss rate is at most "
+        "this budget (conformal risk control along a cost-aware path, cascade_crc.py). Requires --gate. Calibrating "
+        "the stages separately let the miss rate double on real data (docs/real_data_findings.md section 13). "
+        "Overrides --stage1-miss-budget's threshold. Best with --split random (the guarantee assumes exchangeability)",
+    )
     parser.add_argument("--adaptive-gamma", type=float, default=0.01, help="AdaptiveConformalGate step size")
     parser.add_argument("--adaptive-window-size", type=int, default=200, help="AdaptiveConformalGate sliding-window size")
     parser.add_argument("-v", "--verbose", action="store_true")
@@ -124,6 +189,8 @@ def main(argv=None) -> int:
     args = parse_args(argv)
     if args.adaptive_escalation and args.gate == "none":
         raise ValueError("--adaptive-escalation requires --gate softmax, openset or knn")
+    if args.joint_miss_budget is not None and args.gate == "none":
+        raise ValueError("--joint-miss-budget requires a --gate (the escalation decision is part of the cascade)")
     logging.basicConfig(
         level=logging.DEBUG if args.verbose else logging.INFO,
         format="%(asctime)s %(levelname)s %(name)s: %(message)s",
@@ -132,8 +199,11 @@ def main(argv=None) -> int:
     df = _load_training_data(args.data)
     logger.info("Loaded %d rows from %d file(s)", len(df), len(args.data))
 
-    train, val, test = time_based_split(df, train_frac=args.train_frac, val_frac=args.val_frac)
-    logger.info("Time-based split: train=%d val=%d test=%d", len(train), len(val), len(test))
+    if args.split == "random":
+        train, val, test = random_split(df, train_frac=args.train_frac, val_frac=args.val_frac, random_state=0)
+    else:
+        train, val, test = time_based_split(df, train_frac=args.train_frac, val_frac=args.val_frac)
+    logger.info("%s split: train=%d val=%d test=%d", args.split.capitalize(), len(train), len(val), len(test))
 
     X_train = train[CANONICAL_FEATURE_COLUMNS].to_numpy()
 
@@ -221,6 +291,9 @@ def main(argv=None) -> int:
         elif args.gate == "knn":
             gate = KNNGate(stage2).fit(X_train, train["attack_category"].tolist())
             gate.save(model_dir / KNN_GATE_FILENAME)
+        elif args.gate == "fused":
+            gate = FusedGate(stage2).fit(X_train, train["attack_category"].tolist())
+            gate.save(model_dir / FUSED_GATE_FILENAME)
         else:
             gate = SoftmaxGate(stage2)  # no fitted state of its own; reconstructed fresh in serve.py
 
@@ -260,6 +333,9 @@ def main(argv=None) -> int:
                 args.escalation_budget,
             )
         (model_dir / GATE_TYPE_FILENAME).write_text(args.gate)
+
+        if args.joint_miss_budget is not None:
+            _calibrate_cascade_jointly(args, val, stage1, stage2, gate, escalation_gate, model_dir)
 
     return 0
 
