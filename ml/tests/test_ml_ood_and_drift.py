@@ -223,7 +223,7 @@ def test_stage1_stream_trial_segments_and_ranges():
     df = load_and_map(FIXTURE_PATH)
     rows = stage1_stream_trial(df, CANONICAL_FEATURE_COLUMNS, miss_budget=0.1, seed=0, stage1_n_estimators=50)
     out = pd.DataFrame(rows)
-    assert set(out["method"]) == {"static", "adaptive", "recalibrated"}
+    assert set(out["method"]) == {"static", "adaptive", "recalibrated", "union"}
     assert {"overall", "seen_families", "new_families"} <= set(out["segment"])
     assert any(s.startswith("day_") for s in out["segment"])
     overall = out[out["segment"] == "overall"]
@@ -297,3 +297,15 @@ def test_load_and_map_cicflowmeter_fails_loudly_without_label(tmp_path):
     pd.DataFrame({col: [1.0] for col in CICIDS_COLUMN_MAP}).to_csv(path, index=False)
     with pytest.raises(ValueError, match="no label column"):
         load_and_map_cicflowmeter(path)
+
+
+def test_stage1_union_never_misses_more_than_either_online_method():
+    df = load_and_map(FIXTURE_PATH)
+    out = pd.DataFrame(stage1_stream_trial(df, CANONICAL_FEATURE_COLUMNS, miss_budget=0.1, seed=0,
+                                           feedback_delay=20, stage1_n_estimators=50))
+    for seg, g in out.groupby("segment"):
+        m = g.set_index("method")
+        if m.loc["union", "n_attacks"] == 0:
+            continue
+        assert m.loc["union", "miss_rate"] <= min(m.loc["adaptive", "miss_rate"], m.loc["recalibrated", "miss_rate"]) + 1e-12
+        assert m.loc["union", "benign_flag_rate"] >= max(m.loc["adaptive", "benign_flag_rate"], m.loc["recalibrated", "benign_flag_rate"]) - 1e-12

@@ -128,13 +128,18 @@ class GeminiLLMClient(LLMClient):
     itself names the current replacement.
     """
 
-    def __init__(self, model: str = "gemini-3.6-flash", api_key: Optional[str] = None) -> None:
+    def __init__(self, model: str = "gemini-3.6-flash", api_key: Optional[str] = None, timeout_s: float = 120.0) -> None:
         try:
             from google import genai
             from google.genai import types
         except ImportError as e:  # pragma: no cover - exercised only when the package is absent
             raise ImportError("GeminiLLMClient requires the 'google-genai' package: pip install google-genai") from e
-        self._client = genai.Client(api_key=api_key) if api_key else genai.Client()
+        # Without a timeout a dropped connection blocks forever: a live H3 run
+        # hung for 50 minutes on one request. A timeout raises, and
+        # retry.RetryingLLMClient retries it like any other failed call.
+        http_options = types.HttpOptions(timeout=int(timeout_s * 1000))
+        self._client = (genai.Client(api_key=api_key, http_options=http_options) if api_key
+                        else genai.Client(http_options=http_options))
         self._types = types
         self.model = model
 
@@ -147,3 +152,37 @@ class GeminiLLMClient(LLMClient):
         )
         elapsed_ms = (time.perf_counter() - t0) * 1000.0
         return LLMResponse(text=response.text or "", latency_ms=elapsed_ms, model_name=self.model)
+
+
+class OllamaLLMClient(LLMClient):
+    """Local open-weights model served by Ollama (https://ollama.com), so the
+    Tier 2 results can be reproduced without any hosted API. Uses Ollama's
+    HTTP chat endpoint with the standard library only. `format="json"` asks
+    Ollama to constrain the output to JSON, which small local models
+    otherwise often break; temperature 0 makes runs repeatable.
+    """
+
+    def __init__(self, model: str = "llama3.2:1b", host: str = "http://localhost:11434", timeout_s: float = 300.0) -> None:
+        self.model = model
+        self.host = host.rstrip("/")
+        self.timeout_s = timeout_s
+
+    def complete(self, system_prompt: str, user_prompt: str) -> LLMResponse:
+        import json
+        import urllib.request
+
+        body = json.dumps(
+            {
+                "model": self.model,
+                "messages": [{"role": "system", "content": system_prompt}, {"role": "user", "content": user_prompt}],
+                "stream": False,
+                "format": "json",
+                "options": {"temperature": 0},
+            }
+        ).encode()
+        req = urllib.request.Request(f"{self.host}/api/chat", data=body, headers={"Content-Type": "application/json"})
+        t0 = time.perf_counter()
+        with urllib.request.urlopen(req, timeout=self.timeout_s) as resp:
+            payload = json.loads(resp.read().decode())
+        elapsed_ms = (time.perf_counter() - t0) * 1000.0
+        return LLMResponse(text=payload.get("message", {}).get("content", ""), latency_ms=elapsed_ms, model_name=self.model)

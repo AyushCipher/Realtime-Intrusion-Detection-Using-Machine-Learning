@@ -100,7 +100,10 @@ def test_gemini_client_calls_generate_content_and_returns_text():
         client = GeminiLLMClient(model="gemini-2.5-flash", api_key="test-key")
         response = client.complete("system prompt", "user prompt")
 
-    mock_client_cls.assert_called_once_with(api_key="test-key")
+    mock_client_cls.assert_called_once()
+    kwargs = mock_client_cls.call_args.kwargs
+    assert kwargs["api_key"] == "test-key"
+    assert kwargs["http_options"].timeout == 120_000  # a hung request must not block forever
     mock_instance.models.generate_content.assert_called_once()
     call_kwargs = mock_instance.models.generate_content.call_args.kwargs
     assert call_kwargs["model"] == "gemini-2.5-flash"

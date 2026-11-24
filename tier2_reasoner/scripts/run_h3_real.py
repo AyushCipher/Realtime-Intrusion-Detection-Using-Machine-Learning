@@ -14,7 +14,8 @@ new condition and keeps the comparison paired.
 The fields `true_family` and `heldout_family` are removed before the alert reaches the
 reasoner. Writes a JSONL of calls (resumable) and a .summary.json.
 
-Needs GEMINI_API_KEY in the environment (never on the command line or in a file).
+Needs GEMINI_API_KEY in the environment (never on the command line or in a file) for
+--provider gemini (Gemini and Gemma models); --provider ollama uses a local Ollama server.
 
 Usage:
     python -m scripts.run_h3_real --alerts C:/nids_data/real_alerts.jsonl --output h3_real.jsonl
@@ -30,7 +31,7 @@ from pathlib import Path
 
 from scipy.stats import binomtest
 
-from ids_tier2.llm_client import GeminiLLMClient
+from ids_tier2.llm_client import GeminiLLMClient, OllamaLLMClient
 from ids_tier2.reasoner import Tier2Reasoner
 from ids_tier2.retry import RetryingLLMClient
 from scripts.run_h3_v2 import EXPECTED, FREE_PROMPT, _PromptOverride, wilson
@@ -43,13 +44,16 @@ def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     ap.add_argument("--alerts", required=True)
     ap.add_argument("--model", default="gemini-3.1-flash-lite")
+    ap.add_argument("--provider", choices=["gemini", "ollama"], default="gemini")
     ap.add_argument("--min-interval-s", type=float, default=2.0)
     ap.add_argument("--output", default="h3_real.jsonl")
     ap.add_argument("--conditions", default="rag,no_rag_free", help="comma-separated subset of rag,no_rag_free,rag_behaviour")
     args = ap.parse_args()
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(message)s")
 
-    shared = RetryingLLMClient(inner=GeminiLLMClient(model=args.model, api_key=os.environ["GEMINI_API_KEY"]),
+    inner = (OllamaLLMClient(model=args.model) if args.provider == "ollama"
+             else GeminiLLMClient(model=args.model, api_key=os.environ["GEMINI_API_KEY"]))
+    shared = RetryingLLMClient(inner=inner,
                                max_retries=4, base_backoff_s=10.0, min_interval_s=args.min_interval_s)
     all_reasoners = {"rag": Tier2Reasoner(shared, use_rag=True),
                      "no_rag_free": Tier2Reasoner(_PromptOverride(shared, FREE_PROMPT), use_rag=False),

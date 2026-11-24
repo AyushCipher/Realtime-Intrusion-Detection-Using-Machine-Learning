@@ -995,7 +995,13 @@ def drift_method_significance(
 # the attack was scored, modelling triage latency.
 
 
-_STAGE1_METHODS = ("static", "adaptive", "recalibrated")
+# "union" flags a flow when either online method flags it, so an attack is
+# missed only when BOTH miss it: its miss rate is at most the smaller of the
+# two, pointwise, whatever the feedback delay, at the cost of flagging the
+# union of their benign flows. Chosen as the delay-robust candidate before it
+# was evaluated (feedback-delay study; ACI under delay is the El Halabi &
+# Brandt 2026 recursion, which `adaptive` already implements).
+_STAGE1_METHODS = ("static", "adaptive", "recalibrated", "union")
 
 
 def make_stage1(kind: str, fit_df: pd.DataFrame, feature_cols: List[str], seed: int = 0,
@@ -1095,6 +1101,7 @@ def stage1_stream_trial(
         flagged["recalibrated"][i] = recalibrated.decide(s)
         if is_attack[i]:
             pending.append((i + 1 + feedback_delay, s, adaptive_threshold))
+    flagged["union"] = flagged["adaptive"] | flagged["recalibrated"]
 
     families = eval_df[label_col].to_numpy()
     days = pd.to_datetime(eval_df[timestamp_col]).dt.date.astype(str).to_numpy()
