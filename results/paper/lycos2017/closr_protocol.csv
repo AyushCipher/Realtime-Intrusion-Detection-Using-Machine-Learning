@@ -1,0 +1,17 @@
+kind,detector,auroc,fpr_at_95tpr
+known,hyb3,0.9292,0.0821
+known,hyb3_d6,0.928,0.0843
+known,hyb_sup_if,0.96,0.0553
+known,hyb_sup_knn,0.9303,0.0771
+known,iforest_benign,0.8578,0.1865
+known,knn_benign,0.822,0.1993
+known,xgb_d3,0.9986,0.0028
+known,xgb_d6,0.9997,0.0007
+zero_day,hyb3,0.9615,0.0659
+zero_day,hyb3_d6,0.9689,0.0587
+zero_day,hyb_sup_if,0.9311,0.0943
+zero_day,hyb_sup_knn,0.9642,0.0762
+zero_day,iforest_benign,0.874,0.182
+zero_day,knn_benign,0.9337,0.1433
+zero_day,xgb_d3,0.9066,0.1257
+zero_day,xgb_d6,0.9897,0.0154

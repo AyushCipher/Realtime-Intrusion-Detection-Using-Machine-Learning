@@ -1,0 +1,68 @@
+{
+  "created_utc": "2026-11-20T09:07:14Z",
+  "command": [
+    "scripts/run_vaemax_protocol.py",
+    "--data",
+    "C:/nids_data/real_cicids2018_dedup.csv",
+    "--name",
+    "cicids2018_dedup_5s",
+    "--seeds",
+    "5"
+  ],
+  "python": "3.10.11",
+  "platform": "Windows-10-10.0.26200-SP0",
+  "git_commit": "6f521a8cf65753c277881877a4698c0350d3e7d9",
+  "git_dirty": true,
+  "packages": {
+    "numpy": "2.2.6",
+    "pandas": "2.3.3",
+    "scikit-learn": "1.7.2",
+    "xgboost": "3.2.0",
+    "scipy": "1.15.3",
+    "joblib": "1.5.3"
+  },
+  "seeds": [
+    0,
+    1,
+    2,
+    3,
+    4
+  ],
+  "inputs": [
+    {
+      "path": "C:\\nids_data\\real_cicids2018_dedup.csv",
+      "bytes": 59745553,
+      "sha256": "1abaa41b705479c1e4e1dfb5e0a7903c824814c0328cc009c96ed83c732ecaad"
+    }
+  ],
+  "outputs": [
+    {
+      "path": "C:\\Users\\ayush\\OneDrive\\Desktop\\Urop Project\\results\\paper\\cicids2018_dedup_5s\\vaemax_protocol.csv",
+      "bytes": 2112,
+      "sha256": "acc99de2a83d00d962a8d6e695213423bd873c15a546b9e1f3cf42b10bf71725"
+    }
+  ],
+  "extra": {
+    "known": [
+      "BENIGN",
+      "DDOS attack-HOIC",
+      "DoS attacks-Hulk",
+      "DoS attacks-Slowloris",
+      "SSH-Bruteforce"
+    ],
+    "unknown": [
+      "Bot",
+      "DDOS attack-LOIC-UDP",
+      "DoS attacks-GoldenEye",
+      "Brute Force -Web",
+      "Brute Force -XSS",
+      "SQL Injection"
+    ],
+    "cap": 10000,
+    "vaemax_reference": {
+      "unknown_recall_2018": 0.66,
+      "benign_fpr": "<0.05",
+      "known_acc": ">0.95"
+    }
+  }
+}

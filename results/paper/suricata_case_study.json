@@ -1,0 +1,40 @@
+{
+  "pcap_flows_extracted_by_ingestion": 1042,
+  "ground_truth_flows": {
+    "burst": 923,
+    "probe": 109,
+    "normal": 10
+  },
+  "suricata": {
+    "rules": "Emerging Threats Open (all categories)",
+    "alerts": 0,
+    "flows_alerted": 0,
+    "signatures": []
+  },
+  "ours": {
+    "normal": {
+      "flows": 10,
+      "stage1_flagged": 0,
+      "alerts": 0,
+      "predicted_classes": {}
+    },
+    "burst": {
+      "flows": 923,
+      "stage1_flagged": 0,
+      "alerts": 0,
+      "predicted_classes": {}
+    },
+    "probe": {
+      "flows": 109,
+      "stage1_flagged": 0,
+      "alerts": 0,
+      "predicted_classes": {}
+    }
+  },
+  "site_calibration": {
+    "benign_calibration_flows": 600,
+    "benign_heldout_flows": 600,
+    "heldout_stage1_flagged": 30,
+    "heldout_escalated": 3
+  }
+}

@@ -1,0 +1,16 @@
+{
+  "rows": 333648,
+  "unique_feature_rows": 229629,
+  "duplicate_share_overall": 0.3118,
+  "conflicting_label_groups": 2410,
+  "rows_in_conflicting_groups": 83753,
+  "test_rows": 50048,
+  "test_rows_also_in_train": 13263,
+  "test_attack_rows_also_in_train": 10653,
+  "test_attack_rows": 24882,
+  "stage1_attack_scores": 173648,
+  "stage1_attack_unique_scores": 37514,
+  "stage1_attack_tie_share": 0.784,
+  "dedup_rows": 227219,
+  "dedup_file": "C:/nids_data/real_cicids2018_dedup.csv"
+}

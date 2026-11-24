@@ -1,0 +1,117 @@
+[
+  {
+    "budget": 0.05,
+    "seed": 0,
+    "guaranteed": [],
+    "waived": [
+      "Infiltration",
+      "Web Attack"
+    ],
+    "uncertifiable": [],
+    "calib_benign_flag_rate": 0.30004835589941975
+  },
+  {
+    "budget": 0.1,
+    "seed": 0,
+    "guaranteed": [
+      "Web Attack"
+    ],
+    "waived": [
+      "Infiltration"
+    ],
+    "uncertifiable": [],
+    "calib_benign_flag_rate": 0.06399097356544164
+  },
+  {
+    "budget": 0.05,
+    "seed": 1,
+    "guaranteed": [],
+    "waived": [
+      "Infiltration",
+      "Web Attack"
+    ],
+    "uncertifiable": [],
+    "calib_benign_flag_rate": 0.30000805931656993
+  },
+  {
+    "budget": 0.1,
+    "seed": 1,
+    "guaranteed": [
+      "Web Attack"
+    ],
+    "waived": [
+      "Infiltration"
+    ],
+    "uncertifiable": [],
+    "calib_benign_flag_rate": 0.02462121212121212
+  },
+  {
+    "budget": 0.05,
+    "seed": 2,
+    "guaranteed": [],
+    "waived": [
+      "Infiltration",
+      "Web Attack"
+    ],
+    "uncertifiable": [],
+    "calib_benign_flag_rate": 0.3000886524822695
+  },
+  {
+    "budget": 0.1,
+    "seed": 2,
+    "guaranteed": [
+      "Web Attack"
+    ],
+    "waived": [
+      "Infiltration"
+    ],
+    "uncertifiable": [],
+    "calib_benign_flag_rate": 0.048275306254029655
+  },
+  {
+    "budget": 0.05,
+    "seed": 3,
+    "guaranteed": [],
+    "waived": [
+      "Infiltration",
+      "Web Attack"
+    ],
+    "uncertifiable": [],
+    "calib_benign_flag_rate": 0.30000805931656993
+  },
+  {
+    "budget": 0.1,
+    "seed": 3,
+    "guaranteed": [
+      "Web Attack"
+    ],
+    "waived": [
+      "Infiltration"
+    ],
+    "uncertifiable": [],
+    "calib_benign_flag_rate": 0.029416505480335267
+  },
+  {
+    "budget": 0.05,
+    "seed": 4,
+    "guaranteed": [],
+    "waived": [
+      "Infiltration",
+      "Web Attack"
+    ],
+    "uncertifiable": [],
+    "calib_benign_flag_rate": 0.3001289490651193
+  },
+  {
+    "budget": 0.1,
+    "seed": 4,
+    "guaranteed": [
+      "Web Attack"
+    ],
+    "waived": [
+      "Infiltration"
+    ],
+    "uncertifiable": [],
+    "calib_benign_flag_rate": 0.024097356544165054
+  }
+]

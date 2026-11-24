@@ -1,0 +1,54 @@
+{
+  "created_utc": "2026-11-19T19:02:07Z",
+  "command": [
+    "scripts/run_closr_protocol.py",
+    "--data",
+    "C:/nids_data/lycos2017_canonical_dedup.csv",
+    "--name",
+    "lycos2017",
+    "--seeds",
+    "3"
+  ],
+  "python": "3.10.11",
+  "platform": "Windows-10-10.0.26200-SP0",
+  "git_commit": "6f521a8cf65753c277881877a4698c0350d3e7d9",
+  "git_dirty": true,
+  "packages": {
+    "numpy": "2.2.6",
+    "pandas": "2.3.3",
+    "scikit-learn": "1.7.2",
+    "xgboost": "3.2.0",
+    "scipy": "1.15.3",
+    "joblib": "1.5.3"
+  },
+  "seeds": [
+    0,
+    1,
+    2
+  ],
+  "inputs": [
+    {
+      "path": "C:\\nids_data\\lycos2017_canonical_dedup.csv",
+      "bytes": 441983442,
+      "sha256": "6f5fc327c9d808bdbb9939cfa4d801962b56acfc12e1cc383d03a4fbce78ea14"
+    }
+  ],
+  "outputs": [
+    {
+      "path": "C:\\Users\\ayush\\OneDrive\\Desktop\\Urop Project\\results\\paper\\lycos2017\\closr_protocol.csv",
+      "bytes": 540,
+      "sha256": "4dcf195eac835afb8940003f3c123de3c9f98afe028477aec11872e04c45bfb3"
+    }
+  ],
+  "extra": {
+    "zero_day": [
+      "webattack_sql_injection",
+      "heartbleed"
+    ],
+    "cap": 30000,
+    "paper_reference_fpr95_clad": {
+      "heartbleed": 0.007264,
+      "web_sql_injection": 0.003331
+    }
+  }
+}

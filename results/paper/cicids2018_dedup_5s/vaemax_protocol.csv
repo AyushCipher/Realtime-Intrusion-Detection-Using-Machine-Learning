@@ -1,0 +1,50 @@
+scope,gate,benign_fpr_mean,benign_fpr_std,known_attack_acc_mean,known_attack_acc_std,unknown_recall_mean,unknown_recall_std
+ALL,efc,0.045,0.01,0.87,0.006,0.64,0.018
+ALL,energy,0.054,0.009,0.67,0.006,0.483,0.129
+ALL,knn,0.049,0.005,0.894,0.004,0.255,0.091
+ALL,mahalanobis,0.055,0.008,0.884,0.004,0.108,0.002
+ALL,maxlogit,0.054,0.008,0.67,0.006,0.494,0.125
+ALL,openset,0.048,0.006,0.665,0.005,0.562,0.15
+ALL,softmax,0.048,0.006,0.663,0.003,0.576,0.152
+Bot,efc,,,,,0.972,0.0
+Bot,energy,,,,,0.209,0.222
+Bot,knn,,,,,0.009,0.0
+Bot,mahalanobis,,,,,0.007,0.001
+Bot,maxlogit,,,,,0.209,0.223
+Bot,openset,,,,,0.27,0.342
+Bot,softmax,,,,,0.331,0.348
+Brute Force -Web,efc,,,,,0.365,0.228
+Brute Force -Web,energy,,,,,0.526,0.094
+Brute Force -Web,knn,,,,,0.861,0.087
+Brute Force -Web,mahalanobis,,,,,0.639,0.024
+Brute Force -Web,maxlogit,,,,,0.519,0.104
+Brute Force -Web,openset,,,,,0.432,0.086
+Brute Force -Web,softmax,,,,,0.54,0.193
+Brute Force -XSS,efc,,,,,0.245,0.052
+Brute Force -XSS,energy,,,,,0.563,0.307
+Brute Force -XSS,knn,,,,,0.672,0.0
+Brute Force -XSS,mahalanobis,,,,,0.649,0.0
+Brute Force -XSS,maxlogit,,,,,0.563,0.307
+Brute Force -XSS,openset,,,,,0.406,0.136
+Brute Force -XSS,softmax,,,,,0.397,0.087
+DDOS attack-LOIC-UDP,efc,,,,,0.999,0.0
+DDOS attack-LOIC-UDP,energy,,,,,1.0,0.0
+DDOS attack-LOIC-UDP,knn,,,,,1.0,0.0
+DDOS attack-LOIC-UDP,mahalanobis,,,,,1.0,0.0
+DDOS attack-LOIC-UDP,maxlogit,,,,,1.0,0.0
+DDOS attack-LOIC-UDP,openset,,,,,1.0,0.0
+DDOS attack-LOIC-UDP,softmax,,,,,1.0,0.0
+DoS attacks-GoldenEye,efc,,,,,0.267,0.032
+DoS attacks-GoldenEye,energy,,,,,0.665,0.112
+DoS attacks-GoldenEye,knn,,,,,0.336,0.201
+DoS attacks-GoldenEye,mahalanobis,,,,,0.024,0.003
+DoS attacks-GoldenEye,maxlogit,,,,,0.689,0.112
+DoS attacks-GoldenEye,openset,,,,,0.787,0.073
+DoS attacks-GoldenEye,softmax,,,,,0.755,0.03
+SQL Injection,efc,,,,,0.379,0.135
+SQL Injection,energy,,,,,0.321,0.065
+SQL Injection,knn,,,,,0.638,0.152
+SQL Injection,mahalanobis,,,,,0.055,0.043
+SQL Injection,maxlogit,,,,,0.321,0.065
+SQL Injection,openset,,,,,0.276,0.046
+SQL Injection,softmax,,,,,0.262,0.058

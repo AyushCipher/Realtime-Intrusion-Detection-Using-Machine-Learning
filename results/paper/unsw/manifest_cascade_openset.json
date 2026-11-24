@@ -1,0 +1,65 @@
+{
+  "created_utc": "2026-11-20T08:45:52Z",
+  "command": [
+    "scripts/run_cascade_openset.py",
+    "--data",
+    "C:/nids_data/unsw_canonical_dedup.csv",
+    "--name",
+    "unsw",
+    "--seeds",
+    "5",
+    "--cap-per-label",
+    "20000"
+  ],
+  "python": "3.10.11",
+  "platform": "Windows-10-10.0.26200-SP0",
+  "git_commit": "6f521a8cf65753c277881877a4698c0350d3e7d9",
+  "git_dirty": true,
+  "packages": {
+    "numpy": "2.2.6",
+    "pandas": "2.3.3",
+    "scikit-learn": "1.7.2",
+    "xgboost": "3.2.0",
+    "scipy": "1.15.3",
+    "joblib": "1.5.3"
+  },
+  "seeds": [
+    0,
+    1,
+    2,
+    3,
+    4
+  ],
+  "inputs": [
+    {
+      "path": "C:\\nids_data\\unsw_canonical_dedup.csv",
+      "bytes": 95338391,
+      "sha256": "1e36eb802a5f4d3282b8110951f2f6be721acc5bbfb7600549f83a24369f3635"
+    }
+  ],
+  "outputs": [
+    {
+      "path": "C:\\Users\\ayush\\OneDrive\\Desktop\\Urop Project\\results\\paper\\unsw\\cascade_openset.csv",
+      "bytes": 466,
+      "sha256": "3e2f6815297cf98ae1bbd48edd5990fd5a05cf966683fd04121a46443883f062"
+    }
+  ],
+  "extra": {
+    "data": "C:/nids_data/unsw_canonical_dedup.csv",
+    "name": "unsw",
+    "seeds": 5,
+    "miss_budget": 0.05,
+    "budget": 0.1,
+    "budgets": [
+      0.01,
+      0.02,
+      0.05,
+      0.1,
+      0.2
+    ],
+    "cap_per_label": 20000,
+    "stage1_kind": "hybrid",
+    "stage2_trees": 200,
+    "max_unknown": 10000
+  }
+}

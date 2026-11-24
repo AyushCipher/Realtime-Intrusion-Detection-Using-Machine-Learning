@@ -1,0 +1,43 @@
+scope,gate,benign_fpr_mean,benign_fpr_std,known_attack_acc_mean,known_attack_acc_std,unknown_recall_mean,unknown_recall_std
+ALL,energy,0.056,0.009,0.668,0.007,0.512,0.173
+ALL,knn,0.048,0.006,0.894,0.005,0.241,0.105
+ALL,mahalanobis,0.052,0.007,0.884,0.005,0.107,0.002
+ALL,maxlogit,0.056,0.009,0.667,0.007,0.523,0.167
+ALL,openset,0.049,0.006,0.662,0.003,0.623,0.174
+ALL,softmax,0.046,0.006,0.663,0.003,0.637,0.179
+Bot,energy,,,,,0.282,0.281
+Bot,knn,,,,,0.009,0.0
+Bot,mahalanobis,,,,,0.006,0.001
+Bot,maxlogit,,,,,0.282,0.281
+Bot,openset,,,,,0.382,0.431
+Bot,softmax,,,,,0.463,0.418
+Brute Force -Web,energy,,,,,0.535,0.09
+Brute Force -Web,knn,,,,,0.872,0.092
+Brute Force -Web,mahalanobis,,,,,0.628,0.026
+Brute Force -Web,maxlogit,,,,,0.535,0.09
+Brute Force -Web,openset,,,,,0.494,0.021
+Brute Force -Web,softmax,,,,,0.575,0.218
+Brute Force -XSS,energy,,,,,0.538,0.325
+Brute Force -XSS,knn,,,,,0.672,0.0
+Brute Force -XSS,mahalanobis,,,,,0.649,0.0
+Brute Force -XSS,maxlogit,,,,,0.538,0.325
+Brute Force -XSS,openset,,,,,0.349,0.003
+Brute Force -XSS,softmax,,,,,0.36,0.013
+DDOS attack-LOIC-UDP,energy,,,,,1.0,0.0
+DDOS attack-LOIC-UDP,knn,,,,,1.0,0.0
+DDOS attack-LOIC-UDP,mahalanobis,,,,,1.0,0.0
+DDOS attack-LOIC-UDP,maxlogit,,,,,1.0,0.0
+DDOS attack-LOIC-UDP,openset,,,,,1.0,0.0
+DDOS attack-LOIC-UDP,softmax,,,,,1.0,0.0
+DoS attacks-GoldenEye,energy,,,,,0.656,0.154
+DoS attacks-GoldenEye,knn,,,,,0.304,0.231
+DoS attacks-GoldenEye,mahalanobis,,,,,0.022,0.002
+DoS attacks-GoldenEye,maxlogit,,,,,0.682,0.158
+DoS attacks-GoldenEye,openset,,,,,0.809,0.078
+DoS attacks-GoldenEye,softmax,,,,,0.759,0.02
+SQL Injection,energy,,,,,0.316,0.085
+SQL Injection,knn,,,,,0.707,0.164
+SQL Injection,mahalanobis,,,,,0.057,0.05
+SQL Injection,maxlogit,,,,,0.316,0.085
+SQL Injection,openset,,,,,0.287,0.05
+SQL Injection,softmax,,,,,0.276,0.075

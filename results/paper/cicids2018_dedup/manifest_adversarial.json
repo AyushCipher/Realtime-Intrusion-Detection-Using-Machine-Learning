@@ -1,0 +1,109 @@
+{
+  "created_utc": "2026-11-19T18:18:54Z",
+  "command": [
+    "scripts/run_adversarial_calibration.py",
+    "--data",
+    "C:/nids_data/real_cicids2018_dedup.csv",
+    "--name",
+    "cicids2018_dedup",
+    "--seeds",
+    "3"
+  ],
+  "python": "3.10.11",
+  "platform": "Windows-10-10.0.26200-SP0",
+  "git_commit": "6f521a8cf65753c277881877a4698c0350d3e7d9",
+  "git_dirty": true,
+  "packages": {
+    "numpy": "2.2.6",
+    "pandas": "2.3.3",
+    "scikit-learn": "1.7.2",
+    "xgboost": "3.2.0",
+    "scipy": "1.15.3",
+    "joblib": "1.5.3"
+  },
+  "seeds": [
+    0,
+    1,
+    2
+  ],
+  "inputs": [
+    {
+      "path": "C:\\nids_data\\real_cicids2018_dedup.csv",
+      "bytes": 59745553,
+      "sha256": "1abaa41b705479c1e4e1dfb5e0a7903c824814c0328cc009c96ed83c732ecaad"
+    }
+  ],
+  "outputs": [
+    {
+      "path": "C:\\Users\\ayush\\OneDrive\\Desktop\\Urop Project\\results\\paper\\cicids2018_dedup\\adversarial_calibration.csv",
+      "bytes": 2009,
+      "sha256": "c1d3715c1a22bee80dcc0f83fadae53adf104d0d8cf2eafa5c562960311692f4"
+    }
+  ],
+  "extra": {
+    "settings": [
+      [
+        "none",
+        1.0
+      ],
+      [
+        "slow",
+        2.0
+      ],
+      [
+        "slow",
+        4.0
+      ],
+      [
+        "slow",
+        8.0
+      ],
+      [
+        "pad",
+        0.5
+      ],
+      [
+        "pad",
+        1.0
+      ],
+      [
+        "slowpad",
+        4.0
+      ],
+      [
+        "slow",
+        32.0
+      ]
+    ],
+    "law": [
+      [
+        "none",
+        1.0
+      ],
+      [
+        "slow",
+        2.0
+      ],
+      [
+        "slow",
+        4.0
+      ],
+      [
+        "slow",
+        8.0
+      ],
+      [
+        "pad",
+        0.5
+      ],
+      [
+        "pad",
+        1.0
+      ],
+      [
+        "slowpad",
+        4.0
+      ]
+    ]
+  }
+}

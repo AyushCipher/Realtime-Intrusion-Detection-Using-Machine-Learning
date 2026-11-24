@@ -1,0 +1,43 @@
+{
+  "created_utc": "2026-11-19T18:25:38Z",
+  "command": [
+    "scripts/stage1_selection.py",
+    "--data",
+    "C:/nids_data/real_cicids2018_dedup.csv",
+    "--name",
+    "cicids2018_dedup",
+    "--seeds",
+    "2"
+  ],
+  "python": "3.10.11",
+  "platform": "Windows-10-10.0.26200-SP0",
+  "git_commit": "6f521a8cf65753c277881877a4698c0350d3e7d9",
+  "git_dirty": true,
+  "packages": {
+    "numpy": "2.2.6",
+    "pandas": "2.3.3",
+    "scikit-learn": "1.7.2",
+    "xgboost": "3.2.0",
+    "scipy": "1.15.3",
+    "joblib": "1.5.3"
+  },
+  "seeds": [
+    0,
+    1
+  ],
+  "inputs": [
+    {
+      "path": "C:\\nids_data\\real_cicids2018_dedup.csv",
+      "bytes": 59745553,
+      "sha256": "1abaa41b705479c1e4e1dfb5e0a7903c824814c0328cc009c96ed83c732ecaad"
+    }
+  ],
+  "outputs": [
+    {
+      "path": "C:\\Users\\ayush\\OneDrive\\Desktop\\Urop Project\\results\\paper\\cicids2018_dedup\\stage1_selection.csv",
+      "bytes": 544,
+      "sha256": "c8c47ec805fb49a9e1c07c6a921f648032958b10b910b512df33880dcc50fe90"
+    }
+  ],
+  "extra": {}
+}

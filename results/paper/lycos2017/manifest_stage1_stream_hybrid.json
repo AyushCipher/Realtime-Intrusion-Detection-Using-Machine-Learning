@@ -1,0 +1,61 @@
+{
+  "created_utc": "2026-11-19T19:29:05Z",
+  "command": [
+    "scripts/stage1_stream_hybrid.py",
+    "--data",
+    "C:/nids_data/lycos2017_canonical_dedup.csv",
+    "--name",
+    "lycos2017",
+    "--seeds",
+    "2",
+    "--cap-per-label",
+    "150000"
+  ],
+  "python": "3.10.11",
+  "platform": "Windows-10-10.0.26200-SP0",
+  "git_commit": "6f521a8cf65753c277881877a4698c0350d3e7d9",
+  "git_dirty": true,
+  "packages": {
+    "numpy": "2.2.6",
+    "pandas": "2.3.3",
+    "scikit-learn": "1.7.2",
+    "xgboost": "3.2.0",
+    "scipy": "1.15.3",
+    "joblib": "1.5.3"
+  },
+  "seeds": [
+    0,
+    1
+  ],
+  "inputs": [
+    {
+      "path": "C:\\nids_data\\lycos2017_canonical_dedup.csv",
+      "bytes": 441983442,
+      "sha256": "6f5fc327c9d808bdbb9939cfa4d801962b56acfc12e1cc383d03a4fbce78ea14"
+    }
+  ],
+  "outputs": [
+    {
+      "path": "C:\\Users\\ayush\\OneDrive\\Desktop\\Urop Project\\results\\paper\\lycos2017\\stage1_stream_hybrid.csv",
+      "bytes": 315,
+      "sha256": "baaa6b8b6abc154ecfe7cee57a31dcc8e2f8e091f0fb03a81acc04fe64c864ee"
+    }
+  ],
+  "extra": {
+    "data": "C:/nids_data/lycos2017_canonical_dedup.csv",
+    "name": "lycos2017",
+    "seeds": 2,
+    "budgets": [
+      0.05,
+      0.1
+    ],
+    "benign_cap": 0.3,
+    "delays": [
+      0,
+      1000
+    ],
+    "gamma": 0.01,
+    "window": 500,
+    "cap_per_label": 150000
+  }
+}

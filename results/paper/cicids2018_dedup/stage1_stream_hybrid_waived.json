@@ -1,0 +1,70 @@
+[
+  {
+    "budget": 0.05,
+    "seed": 0,
+    "guaranteed": [],
+    "waived": [
+      "Infiltration",
+      "Web Attack"
+    ],
+    "uncertifiable": [],
+    "calib_benign_flag_rate": 0.30000805931656993
+  },
+  {
+    "budget": 0.1,
+    "seed": 0,
+    "guaranteed": [],
+    "waived": [
+      "Infiltration",
+      "Web Attack"
+    ],
+    "uncertifiable": [],
+    "calib_benign_flag_rate": 0.30000805931656993
+  },
+  {
+    "budget": 0.05,
+    "seed": 1,
+    "guaranteed": [],
+    "waived": [
+      "Infiltration",
+      "Web Attack"
+    ],
+    "uncertifiable": [],
+    "calib_benign_flag_rate": 0.30000805931656993
+  },
+  {
+    "budget": 0.1,
+    "seed": 1,
+    "guaranteed": [
+      "Web Attack"
+    ],
+    "waived": [
+      "Infiltration"
+    ],
+    "uncertifiable": [],
+    "calib_benign_flag_rate": 0.03054480980012895
+  },
+  {
+    "budget": 0.05,
+    "seed": 2,
+    "guaranteed": [],
+    "waived": [
+      "Infiltration",
+      "Web Attack"
+    ],
+    "uncertifiable": [],
+    "calib_benign_flag_rate": 0.30000805931656993
+  },
+  {
+    "budget": 0.1,
+    "seed": 2,
+    "guaranteed": [
+      "Web Attack"
+    ],
+    "waived": [
+      "Infiltration"
+    ],
+    "uncertifiable": [],
+    "calib_benign_flag_rate": 0.026958413926499034
+  }
+]

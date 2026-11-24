@@ -1,0 +1,246 @@
+seed,gate,budget,scope,benign_fpr,known_attack_acc,unknown_recall
+0,softmax,0.05,ALL,0.044,0.666708479678876,0.47008585226256483
+0,softmax,0.05,Bot,,,0.08674747070019033
+0,softmax,0.05,DDOS attack-LOIC-UDP,,,1.0
+0,softmax,0.05,DoS attacks-GoldenEye,,,0.7578
+0,softmax,0.05,Brute Force -Web,,,0.6252983293556086
+0,softmax,0.05,Brute Force -XSS,,,0.367816091954023
+0,softmax,0.05,SQL Injection,,,0.22413793103448276
+0,openset,0.05,ALL,0.0465,0.6650777722027095,0.47907351099982115
+0,openset,0.05,Bot,,,0.0877491735951117
+0,openset,0.05,DDOS attack-LOIC-UDP,,,1.0
+0,openset,0.05,DoS attacks-GoldenEye,,,0.7828
+0,openset,0.05,Brute Force -Web,,,0.48687350835322196
+0,openset,0.05,Brute Force -XSS,,,0.3505747126436782
+0,openset,0.05,SQL Injection,,,0.25862068965517243
+0,maxlogit,0.05,ALL,0.0485,0.6716006021073758,0.35400643891969236
+0,maxlogit,0.05,Bot,,,0.08514474606831614
+0,maxlogit,0.05,DDOS attack-LOIC-UDP,,,1.0
+0,maxlogit,0.05,DoS attacks-GoldenEye,,,0.5058
+0,maxlogit,0.05,Brute Force -Web,,,0.48448687350835323
+0,maxlogit,0.05,Brute Force -XSS,,,0.3505747126436782
+0,maxlogit,0.05,SQL Injection,,,0.25862068965517243
+0,energy,0.05,ALL,0.0485,0.671726041144004,0.3425147558576283
+0,energy,0.05,Bot,,,0.08514474606831614
+0,energy,0.05,DDOS attack-LOIC-UDP,,,1.0
+0,energy,0.05,DoS attacks-GoldenEye,,,0.4801
+0,energy,0.05,Brute Force -Web,,,0.48448687350835323
+0,energy,0.05,Brute Force -XSS,,,0.3505747126436782
+0,energy,0.05,SQL Injection,,,0.25862068965517243
+0,mahalanobis,0.05,ALL,0.0515,0.8853487205218263,0.10570559828295475
+0,mahalanobis,0.05,Bot,,,0.005910047080036061
+0,mahalanobis,0.05,DDOS attack-LOIC-UDP,,,1.0
+0,mahalanobis,0.05,DoS attacks-GoldenEye,,,0.0208
+0,mahalanobis,0.05,Brute Force -Web,,,0.6062052505966588
+0,mahalanobis,0.05,Brute Force -XSS,,,0.6494252873563219
+0,mahalanobis,0.05,SQL Injection,,,0.0
+0,knn,0.05,ALL,0.049,0.8943803311590567,0.1431318189948131
+0,knn,0.05,Bot,,,0.009315836922768706
+0,knn,0.05,DDOS attack-LOIC-UDP,,,1.0
+0,knn,0.05,DoS attacks-GoldenEye,,,0.091
+0,knn,0.05,Brute Force -Web,,,0.766109785202864
+0,knn,0.05,Brute Force -XSS,,,0.6724137931034483
+0,knn,0.05,SQL Injection,,,0.5172413793103449
+0,efc,0.05,ALL,0.0555,0.8753135975915705,0.624396351278841
+0,efc,0.05,Bot,,,0.9723530001001703
+0,efc,0.05,DDOS attack-LOIC-UDP,,,0.999421965317919
+0,efc,0.05,DoS attacks-GoldenEye,,,0.2338
+0,efc,0.05,Brute Force -Web,,,0.27923627684964203
+0,efc,0.05,Brute Force -XSS,,,0.2988505747126437
+0,efc,0.05,SQL Injection,,,0.3620689655172414
+1,softmax,0.05,ALL,0.0405,0.6618163572503764,0.6165712752638168
+1,softmax,0.05,Bot,,,0.3876590203345688
+1,softmax,0.05,DDOS attack-LOIC-UDP,,,1.0
+1,softmax,0.05,DoS attacks-GoldenEye,,,0.7791
+1,softmax,0.05,Brute Force -Web,,,0.7637231503579952
+1,softmax,0.05,Brute Force -XSS,,,0.367816091954023
+1,softmax,0.05,SQL Injection,,,0.2413793103448276
+1,openset,0.05,ALL,0.045,0.6591821374811841,0.5723484170989089
+1,openset,0.05,Bot,,,0.18200941600721227
+1,openset,0.05,DDOS attack-LOIC-UDP,,,1.0
+1,openset,0.05,DoS attacks-GoldenEye,,,0.8977
+1,openset,0.05,Brute Force -Web,,,0.477326968973747
+1,openset,0.05,Brute Force -XSS,,,0.3505747126436782
+1,openset,0.05,SQL Injection,,,0.25862068965517243
+1,maxlogit,0.05,ALL,0.0525,0.6595584545910688,0.5267394026113397
+1,maxlogit,0.05,Bot,,,0.15656616247620955
+1,maxlogit,0.05,DDOS attack-LOIC-UDP,,,1.0
+1,maxlogit,0.05,DoS attacks-GoldenEye,,,0.811
+1,maxlogit,0.05,Brute Force -Web,,,0.4821002386634845
+1,maxlogit,0.05,Brute Force -XSS,,,0.9137931034482759
+1,maxlogit,0.05,SQL Injection,,,0.27586206896551724
+1,energy,0.05,ALL,0.0525,0.6595584545910688,0.5040243248077267
+1,energy,0.05,Bot,,,0.15656616247620955
+1,energy,0.05,DDOS attack-LOIC-UDP,,,1.0
+1,energy,0.05,DoS attacks-GoldenEye,,,0.7602
+1,energy,0.05,Brute Force -Web,,,0.4821002386634845
+1,energy,0.05,Brute Force -XSS,,,0.9137931034482759
+1,energy,0.05,SQL Injection,,,0.27586206896551724
+1,mahalanobis,0.05,ALL,0.0455,0.8779478173607627,0.10651046324450009
+1,mahalanobis,0.05,Bot,,,0.006110387659020335
+1,mahalanobis,0.05,DDOS attack-LOIC-UDP,,,1.0
+1,mahalanobis,0.05,DoS attacks-GoldenEye,,,0.0213
+1,mahalanobis,0.05,Brute Force -Web,,,0.6205250596658711
+1,mahalanobis,0.05,Brute Force -XSS,,,0.6494252873563219
+1,mahalanobis,0.05,SQL Injection,,,0.08620689655172414
+1,knn,0.05,ALL,0.0415,0.8879829402910185,0.3522178501162583
+1,knn,0.05,Bot,,,0.009315836922768706
+1,knn,0.05,DDOS attack-LOIC-UDP,,,1.0
+1,knn,0.05,DoS attacks-GoldenEye,,,0.5502
+1,knn,0.05,Brute Force -Web,,,0.9260143198090692
+1,knn,0.05,Brute Force -XSS,,,0.6724137931034483
+1,knn,0.05,SQL Injection,,,0.8103448275862069
+1,efc,0.05,ALL,0.0465,0.8601354741595585,0.6525666249329279
+1,efc,0.05,Bot,,,0.9716518080737253
+1,efc,0.05,DDOS attack-LOIC-UDP,,,0.999421965317919
+1,efc,0.05,DoS attacks-GoldenEye,,,0.2856
+1,efc,0.05,Brute Force -Web,,,0.5465393794749404
+1,efc,0.05,Brute Force -XSS,,,0.29310344827586204
+1,efc,0.05,SQL Injection,,,0.5
+2,softmax,0.05,ALL,0.0525,0.6616909182137481,0.8257467358254338
+2,softmax,0.05,Bot,,,0.9135530401682861
+2,softmax,0.05,DDOS attack-LOIC-UDP,,,1.0
+2,softmax,0.05,DoS attacks-GoldenEye,,,0.7395
+2,softmax,0.05,Brute Force -Web,,,0.33651551312649164
+2,softmax,0.05,Brute Force -XSS,,,0.3448275862068966
+2,softmax,0.05,SQL Injection,,,0.3620689655172414
+2,openset,0.05,ALL,0.0565,0.6624435524335173,0.8167143623680916
+2,openset,0.05,Bot,,,0.8774917359511168
+2,openset,0.05,DDOS attack-LOIC-UDP,,,1.0
+2,openset,0.05,DoS attacks-GoldenEye,,,0.7478
+2,openset,0.05,Brute Force -Web,,,0.5178997613365155
+2,openset,0.05,Brute Force -XSS,,,0.3448275862068966
+2,openset,0.05,SQL Injection,,,0.3448275862068966
+2,maxlogit,0.05,ALL,0.0655,0.6712242849974912,0.6889196923627258
+2,maxlogit,0.05,Bot,,,0.6044275267955524
+2,maxlogit,0.05,DDOS attack-LOIC-UDP,,,1.0
+2,maxlogit,0.05,DoS attacks-GoldenEye,,,0.729
+2,maxlogit,0.05,Brute Force -Web,,,0.639618138424821
+2,maxlogit,0.05,Brute Force -XSS,,,0.3505747126436782
+2,maxlogit,0.05,SQL Injection,,,0.41379310344827586
+2,energy,0.05,ALL,0.0655,0.6712242849974912,0.6883831157216956
+2,energy,0.05,Bot,,,0.6032254833216468
+2,energy,0.05,DDOS attack-LOIC-UDP,,,1.0
+2,energy,0.05,DoS attacks-GoldenEye,,,0.729
+2,energy,0.05,Brute Force -Web,,,0.639618138424821
+2,energy,0.05,Brute Force -XSS,,,0.3505747126436782
+2,energy,0.05,SQL Injection,,,0.41379310344827586
+2,mahalanobis,0.05,ALL,0.059,0.8884846964375314,0.1088356286889644
+2,mahalanobis,0.05,Bot,,,0.0074126014224181105
+2,mahalanobis,0.05,DDOS attack-LOIC-UDP,,,1.0
+2,mahalanobis,0.05,DoS attacks-GoldenEye,,,0.0237
+2,mahalanobis,0.05,Brute Force -Web,,,0.6563245823389021
+2,mahalanobis,0.05,Brute Force -XSS,,,0.6494252873563219
+2,mahalanobis,0.05,SQL Injection,,,0.08620689655172414
+2,knn,0.05,ALL,0.054,0.898394380331159,0.2268824897156144
+2,knn,0.05,Bot,,,0.009315836922768706
+2,knn,0.05,DDOS attack-LOIC-UDP,,,1.0
+2,knn,0.05,DoS attacks-GoldenEye,,,0.2701
+2,knn,0.05,Brute Force -Web,,,0.9236276849642004
+2,knn,0.05,Brute Force -XSS,,,0.6724137931034483
+2,knn,0.05,SQL Injection,,,0.7931034482758621
+2,efc,0.05,ALL,0.041,0.8739337681886603,0.6572616705419424
+2,efc,0.05,Bot,,,0.9722528298106782
+2,efc,0.05,DDOS attack-LOIC-UDP,,,0.999421965317919
+2,efc,0.05,DoS attacks-GoldenEye,,,0.2974
+2,efc,0.05,Brute Force -Web,,,0.5560859188544153
+2,efc,0.05,Brute Force -XSS,,,0.1781609195402299
+2,efc,0.05,SQL Injection,,,0.4482758620689655
+3,softmax,0.05,ALL,0.046,0.666708479678876,0.4828742622071186
+3,softmax,0.05,Bot,,,0.17409596313733347
+3,softmax,0.05,DDOS attack-LOIC-UDP,,,1.0
+3,softmax,0.05,DoS attacks-GoldenEye,,,0.7115
+3,softmax,0.05,Brute Force -Web,,,0.33890214797136037
+3,softmax,0.05,Brute Force -XSS,,,0.3505747126436782
+3,softmax,0.05,SQL Injection,,,0.22413793103448276
+3,openset,0.05,ALL,0.0405,0.6694681384846964,0.44889107494187086
+3,openset,0.05,Bot,,,0.10818391265150756
+3,openset,0.05,DDOS attack-LOIC-UDP,,,1.0
+3,openset,0.05,DoS attacks-GoldenEye,,,0.7016
+3,openset,0.05,Brute Force -Web,,,0.33890214797136037
+3,openset,0.05,Brute Force -XSS,,,0.3333333333333333
+3,openset,0.05,SQL Injection,,,0.22413793103448276
+3,maxlogit,0.05,ALL,0.044,0.6758655293527346,0.45434627079234485
+3,maxlogit,0.05,Bot,,,0.09966943804467594
+3,maxlogit,0.05,DDOS attack-LOIC-UDP,,,1.0
+3,maxlogit,0.05,DoS attacks-GoldenEye,,,0.7106
+3,maxlogit,0.05,Brute Force -Web,,,0.6062052505966588
+3,maxlogit,0.05,Brute Force -XSS,,,0.3160919540229885
+3,maxlogit,0.05,SQL Injection,,,0.3620689655172414
+3,energy,0.05,ALL,0.0435,0.6758655293527346,0.45430155607225897
+3,energy,0.05,Bot,,,0.09956926775518381
+3,energy,0.05,DDOS attack-LOIC-UDP,,,1.0
+3,energy,0.05,DoS attacks-GoldenEye,,,0.7106
+3,energy,0.05,Brute Force -Web,,,0.6062052505966588
+3,energy,0.05,Brute Force -XSS,,,0.3160919540229885
+3,energy,0.05,SQL Injection,,,0.3620689655172414
+3,mahalanobis,0.05,ALL,0.052,0.8853487205218263,0.10834376676802003
+3,mahalanobis,0.05,Bot,,,0.006110387659020335
+3,mahalanobis,0.05,DDOS attack-LOIC-UDP,,,1.0
+3,mahalanobis,0.05,DoS attacks-GoldenEye,,,0.0242
+3,mahalanobis,0.05,Brute Force -Web,,,0.649164677804296
+3,mahalanobis,0.05,Brute Force -XSS,,,0.6494252873563219
+3,mahalanobis,0.05,SQL Injection,,,0.08620689655172414
+3,knn,0.05,ALL,0.0475,0.8941294530858003,0.2053299946342336
+3,knn,0.05,Bot,,,0.009315836922768706
+3,knn,0.05,DDOS attack-LOIC-UDP,,,1.0
+3,knn,0.05,DoS attacks-GoldenEye,,,0.2302
+3,knn,0.05,Brute Force -Web,,,0.766109785202864
+3,knn,0.05,Brute Force -XSS,,,0.6724137931034483
+3,knn,0.05,SQL Injection,,,0.5
+3,efc,0.05,ALL,0.03,0.8725539387857502,0.6174208549454481
+3,efc,0.05,Bot,,,0.9717519783632175
+3,efc,0.05,DDOS attack-LOIC-UDP,,,0.999421965317919
+3,efc,0.05,DoS attacks-GoldenEye,,,0.2323
+3,efc,0.05,Brute Force -Web,,,0.00954653937947494
+3,efc,0.05,Brute Force -XSS,,,0.2413793103448276
+3,efc,0.05,SQL Injection,,,0.15517241379310345
+4,softmax,0.05,ALL,0.0565,0.659683893627697,0.48667501341441605
+4,softmax,0.05,Bot,,,0.09145547430632074
+4,softmax,0.05,DDOS attack-LOIC-UDP,,,1.0
+4,softmax,0.05,DoS attacks-GoldenEye,,,0.7863
+4,softmax,0.05,Brute Force -Web,,,0.6372315035799523
+4,softmax,0.05,Brute Force -XSS,,,0.5517241379310345
+4,softmax,0.05,SQL Injection,,,0.25862068965517243
+4,openset,0.05,ALL,0.0495,0.6695935775213246,0.4911017707029154
+4,openset,0.05,Bot,,,0.09255734749073424
+4,openset,0.05,DDOS attack-LOIC-UDP,,,1.0
+4,openset,0.05,DoS attacks-GoldenEye,,,0.8056
+4,openset,0.05,Brute Force -Web,,,0.3412887828162291
+4,openset,0.05,Brute Force -XSS,,,0.6494252873563219
+4,openset,0.05,SQL Injection,,,0.29310344827586204
+4,maxlogit,0.05,ALL,0.057,0.6731058705469142,0.44433017349311393
+4,maxlogit,0.05,Bot,,,0.09976960833416809
+4,maxlogit,0.05,DDOS attack-LOIC-UDP,,,1.0
+4,maxlogit,0.05,DoS attacks-GoldenEye,,,0.688
+4,maxlogit,0.05,Brute Force -Web,,,0.3818615751789976
+4,maxlogit,0.05,Brute Force -XSS,,,0.8850574712643678
+4,maxlogit,0.05,SQL Injection,,,0.29310344827586204
+4,energy,0.05,ALL,0.0605,0.6732313095835424,0.4247898408155965
+4,energy,0.05,Bot,,,0.09976960833416809
+4,energy,0.05,DDOS attack-LOIC-UDP,,,1.0
+4,energy,0.05,DoS attacks-GoldenEye,,,0.6429
+4,energy,0.05,Brute Force -Web,,,0.4152744630071599
+4,energy,0.05,Brute Force -XSS,,,0.8850574712643678
+4,energy,0.05,SQL Injection,,,0.29310344827586204
+4,mahalanobis,0.05,ALL,0.0675,0.8829653788258907,0.11102664997317117
+4,mahalanobis,0.05,Bot,,,0.008113793448863068
+4,mahalanobis,0.05,DDOS attack-LOIC-UDP,,,1.0
+4,mahalanobis,0.05,DoS attacks-GoldenEye,,,0.0281
+4,mahalanobis,0.05,Brute Force -Web,,,0.6610978520286396
+4,mahalanobis,0.05,Brute Force -XSS,,,0.6494252873563219
+4,mahalanobis,0.05,SQL Injection,,,0.017241379310344827
+4,knn,0.05,ALL,0.0535,0.8937531359759157,0.34533178322303704
+4,knn,0.05,Bot,,,0.009315836922768706
+4,knn,0.05,DDOS attack-LOIC-UDP,,,1.0
+4,knn,0.05,DoS attacks-GoldenEye,,,0.5363
+4,knn,0.05,Brute Force -Web,,,0.9236276849642004
+4,knn,0.05,Brute Force -XSS,,,0.6724137931034483
+4,knn,0.05,SQL Injection,,,0.5689655172413793
+4,efc,0.05,ALL,0.054,0.8670346211741093,0.6505991772491504
+4,efc,0.05,Bot,,,0.9724531703896624
+4,efc,0.05,DDOS attack-LOIC-UDP,,,0.999421965317919
+4,efc,0.05,DoS attacks-GoldenEye,,,0.2869
+4,efc,0.05,Brute Force -Web,,,0.4343675417661098
+4,efc,0.05,Brute Force -XSS,,,0.21264367816091953
+4,efc,0.05,SQL Injection,,,0.43103448275862066

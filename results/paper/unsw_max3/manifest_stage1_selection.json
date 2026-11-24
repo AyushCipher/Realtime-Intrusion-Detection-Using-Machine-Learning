@@ -1,0 +1,44 @@
+{
+  "created_utc": "2026-11-20T09:27:46Z",
+  "command": [
+    "scripts/stage1_selection.py",
+    "--data",
+    "C:/nids_data/unsw_canonical_dedup.csv",
+    "--name",
+    "unsw_max3",
+    "--seeds",
+    "3"
+  ],
+  "python": "3.10.11",
+  "platform": "Windows-10-10.0.26200-SP0",
+  "git_commit": "6f521a8cf65753c277881877a4698c0350d3e7d9",
+  "git_dirty": true,
+  "packages": {
+    "numpy": "2.2.6",
+    "pandas": "2.3.3",
+    "scikit-learn": "1.7.2",
+    "xgboost": "3.2.0",
+    "scipy": "1.15.3",
+    "joblib": "1.5.3"
+  },
+  "seeds": [
+    0,
+    1,
+    2
+  ],
+  "inputs": [
+    {
+      "path": "C:\\nids_data\\unsw_canonical_dedup.csv",
+      "bytes": 95338391,
+      "sha256": "1e36eb802a5f4d3282b8110951f2f6be721acc5bbfb7600549f83a24369f3635"
+    }
+  ],
+  "outputs": [
+    {
+      "path": "C:\\Users\\ayush\\OneDrive\\Desktop\\Urop Project\\results\\paper\\unsw_max3\\stage1_selection.csv",
+      "bytes": 1408,
+      "sha256": "ca654453adf3410b67f09050c0c6dc79ab4029737dea074ccbd33cb1726afd64"
+    }
+  ],
+  "extra": {}
+}

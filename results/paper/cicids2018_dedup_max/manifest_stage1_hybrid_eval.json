@@ -1,0 +1,43 @@
+{
+  "created_utc": "2026-11-19T19:40:43Z",
+  "command": [
+    "scripts/stage1_hybrid_eval.py",
+    "--data",
+    "C:/nids_data/real_cicids2018_dedup.csv",
+    "--name",
+    "cicids2018_dedup_max",
+    "--seeds",
+    "2"
+  ],
+  "python": "3.10.11",
+  "platform": "Windows-10-10.0.26200-SP0",
+  "git_commit": "6f521a8cf65753c277881877a4698c0350d3e7d9",
+  "git_dirty": true,
+  "packages": {
+    "numpy": "2.2.6",
+    "pandas": "2.3.3",
+    "scikit-learn": "1.7.2",
+    "xgboost": "3.2.0",
+    "scipy": "1.15.3",
+    "joblib": "1.5.3"
+  },
+  "seeds": [
+    0,
+    1
+  ],
+  "inputs": [
+    {
+      "path": "C:\\nids_data\\real_cicids2018_dedup.csv",
+      "bytes": 59745553,
+      "sha256": "1abaa41b705479c1e4e1dfb5e0a7903c824814c0328cc009c96ed83c732ecaad"
+    }
+  ],
+  "outputs": [
+    {
+      "path": "C:\\Users\\ayush\\OneDrive\\Desktop\\Urop Project\\results\\paper\\cicids2018_dedup_max\\stage1_hybrid_eval.csv",
+      "bytes": 1172,
+      "sha256": "8c73447c7e97f92dd4fc43a688c642b8a702831f3e434a1394d3e692774a4acb"
+    }
+  ],
+  "extra": {}
+}

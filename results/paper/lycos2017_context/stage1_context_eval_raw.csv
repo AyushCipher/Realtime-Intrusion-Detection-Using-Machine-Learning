@@ -1,0 +1,217 @@
+protocol,heldout,seed,features,candidate,auroc
+LOFO_unseen_family,Botnet,0,flow,xgb_d6,0.9111855782312925
+LOFO_unseen_family,Botnet,0,flow,knn_benign,0.9322840816326531
+LOFO_unseen_family,Botnet,0,flow,max_s6k,0.8969080272108844
+LOFO_unseen_family,Botnet,0,flow,efc_benign,0.9863882993197279
+LOFO_unseen_family,Botnet,0,flow+ctx,xgb_d6,0.5603847619047618
+LOFO_unseen_family,Botnet,0,flow+ctx,knn_benign,0.9488647619047619
+LOFO_unseen_family,Botnet,0,flow+ctx,max_s6k,0.9229408163265306
+LOFO_unseen_family,Botnet,0,flow+ctx,efc_benign,0.9806674829931973
+LOFO_unseen_family,Botnet,0,ctx,xgb_d6,0.681765306122449
+LOFO_unseen_family,Botnet,0,ctx,knn_benign,0.7087510204081632
+LOFO_unseen_family,Botnet,0,ctx,max_s6k,0.7063277551020408
+LOFO_unseen_family,Botnet,0,ctx,efc_benign,0.34763700680272114
+LOFO_unseen_family,Brute Force,0,flow,xgb_d6,0.821708628086044
+LOFO_unseen_family,Brute Force,0,flow,knn_benign,0.9783938068968426
+LOFO_unseen_family,Brute Force,0,flow,max_s6k,0.9641791056374953
+LOFO_unseen_family,Brute Force,0,flow,efc_benign,0.9594188385298306
+LOFO_unseen_family,Brute Force,0,flow+ctx,xgb_d6,0.9995022843670334
+LOFO_unseen_family,Brute Force,0,flow+ctx,knn_benign,0.9686939741527327
+LOFO_unseen_family,Brute Force,0,flow+ctx,max_s6k,0.9993913588115432
+LOFO_unseen_family,Brute Force,0,flow+ctx,efc_benign,0.9312296904691815
+LOFO_unseen_family,Brute Force,0,ctx,xgb_d6,0.9716108118206046
+LOFO_unseen_family,Brute Force,0,ctx,knn_benign,0.6244828425650326
+LOFO_unseen_family,Brute Force,0,ctx,max_s6k,0.9445846645156482
+LOFO_unseen_family,Brute Force,0,ctx,efc_benign,0.13702002647276085
+LOFO_unseen_family,DoS/DDoS,0,flow,xgb_d6,0.9833131539299516
+LOFO_unseen_family,DoS/DDoS,0,flow,knn_benign,0.9694208242723835
+LOFO_unseen_family,DoS/DDoS,0,flow,max_s6k,0.9941414295404095
+LOFO_unseen_family,DoS/DDoS,0,flow,efc_benign,0.8687613927484996
+LOFO_unseen_family,DoS/DDoS,0,flow+ctx,xgb_d6,0.9990414879141658
+LOFO_unseen_family,DoS/DDoS,0,flow+ctx,knn_benign,0.9828393713516402
+LOFO_unseen_family,DoS/DDoS,0,flow+ctx,max_s6k,0.99823882877374
+LOFO_unseen_family,DoS/DDoS,0,flow+ctx,efc_benign,0.8385753503453096
+LOFO_unseen_family,DoS/DDoS,0,ctx,xgb_d6,0.6993323073049412
+LOFO_unseen_family,DoS/DDoS,0,ctx,knn_benign,0.953289185644989
+LOFO_unseen_family,DoS/DDoS,0,ctx,max_s6k,0.9381496900949602
+LOFO_unseen_family,DoS/DDoS,0,ctx,efc_benign,0.09336453208501194
+LOFO_unseen_family,PortScan,0,flow,xgb_d6,0.9985027932500001
+LOFO_unseen_family,PortScan,0,flow,knn_benign,0.967275816375
+LOFO_unseen_family,PortScan,0,flow,max_s6k,0.9970678851250001
+LOFO_unseen_family,PortScan,0,flow,efc_benign,0.03931321662500001
+LOFO_unseen_family,PortScan,0,flow+ctx,xgb_d6,0.99889880075
+LOFO_unseen_family,PortScan,0,flow+ctx,knn_benign,0.999423576
+LOFO_unseen_family,PortScan,0,flow+ctx,max_s6k,0.99871693075
+LOFO_unseen_family,PortScan,0,flow+ctx,efc_benign,0.04705681324999998
+LOFO_unseen_family,PortScan,0,ctx,xgb_d6,0.998546262375
+LOFO_unseen_family,PortScan,0,ctx,knn_benign,0.9998905901249999
+LOFO_unseen_family,PortScan,0,ctx,max_s6k,0.9997416755
+LOFO_unseen_family,PortScan,0,ctx,efc_benign,0.20683441849999998
+LOFO_unseen_family,Web Attack,0,flow,xgb_d6,0.9971656389042998
+LOFO_unseen_family,Web Attack,0,flow,knn_benign,0.23535496090212427
+LOFO_unseen_family,Web Attack,0,flow,max_s6k,0.995178102060388
+LOFO_unseen_family,Web Attack,0,flow,efc_benign,0.0834703373997834
+LOFO_unseen_family,Web Attack,0,flow+ctx,xgb_d6,0.9999594734108073
+LOFO_unseen_family,Web Attack,0,flow+ctx,knn_benign,0.9170378378012184
+LOFO_unseen_family,Web Attack,0,flow+ctx,max_s6k,0.9995678373568373
+LOFO_unseen_family,Web Attack,0,flow+ctx,efc_benign,0.06457260739687273
+LOFO_unseen_family,Web Attack,0,ctx,xgb_d6,0.9742823507228291
+LOFO_unseen_family,Web Attack,0,ctx,knn_benign,0.39767850793115433
+LOFO_unseen_family,Web Attack,0,ctx,max_s6k,0.9404105500752585
+LOFO_unseen_family,Web Attack,0,ctx,efc_benign,0.07664420808100997
+random_known_families,-,0,flow,xgb_d6,0.9998945742464488
+random_known_families,-,0,flow,knn_benign,0.9581800043036417
+random_known_families,-,0,flow,max_s6k,0.9998319223256338
+random_known_families,-,0,flow,efc_benign,0.6367213408232075
+random_known_families,-,0,flow+ctx,xgb_d6,0.9999564770875041
+random_known_families,-,0,flow+ctx,knn_benign,0.9879091738385392
+random_known_families,-,0,flow+ctx,max_s6k,0.9999304517114025
+random_known_families,-,0,flow+ctx,efc_benign,0.6155553008285736
+random_known_families,-,0,ctx,xgb_d6,0.9996175214229561
+random_known_families,-,0,ctx,knn_benign,0.9417385302606607
+random_known_families,-,0,ctx,max_s6k,0.999273551437
+random_known_families,-,0,ctx,efc_benign,0.12907739144032485
+LOFO_unseen_family,Botnet,1,flow,xgb_d6,0.9328242176870748
+LOFO_unseen_family,Botnet,1,flow,knn_benign,0.9416542857142858
+LOFO_unseen_family,Botnet,1,flow,max_s6k,0.9143703401360544
+LOFO_unseen_family,Botnet,1,flow,efc_benign,0.9845537414965986
+LOFO_unseen_family,Botnet,1,flow+ctx,xgb_d6,0.7277853061224491
+LOFO_unseen_family,Botnet,1,flow+ctx,knn_benign,0.9574117006802721
+LOFO_unseen_family,Botnet,1,flow+ctx,max_s6k,0.9364444897959183
+LOFO_unseen_family,Botnet,1,flow+ctx,efc_benign,0.977486530612245
+LOFO_unseen_family,Botnet,1,ctx,xgb_d6,0.6835616326530611
+LOFO_unseen_family,Botnet,1,ctx,knn_benign,0.7212180952380953
+LOFO_unseen_family,Botnet,1,ctx,max_s6k,0.7046001360544217
+LOFO_unseen_family,Botnet,1,ctx,efc_benign,0.3456560544217687
+LOFO_unseen_family,Brute Force,1,flow,xgb_d6,0.8801094389831801
+LOFO_unseen_family,Brute Force,1,flow,knn_benign,0.9792370976375686
+LOFO_unseen_family,Brute Force,1,flow,max_s6k,0.9637145311590536
+LOFO_unseen_family,Brute Force,1,flow,efc_benign,0.9620433958351161
+LOFO_unseen_family,Brute Force,1,flow+ctx,xgb_d6,0.9993571001144556
+LOFO_unseen_family,Brute Force,1,flow+ctx,knn_benign,0.9689358447492541
+LOFO_unseen_family,Brute Force,1,flow+ctx,max_s6k,0.9983438156762571
+LOFO_unseen_family,Brute Force,1,flow+ctx,efc_benign,0.9349746271761098
+LOFO_unseen_family,Brute Force,1,ctx,xgb_d6,0.972595064222317
+LOFO_unseen_family,Brute Force,1,ctx,knn_benign,0.6262611106769316
+LOFO_unseen_family,Brute Force,1,ctx,max_s6k,0.9467113514513047
+LOFO_unseen_family,Brute Force,1,ctx,efc_benign,0.12812132732531448
+LOFO_unseen_family,DoS/DDoS,1,flow,xgb_d6,0.9796859262723012
+LOFO_unseen_family,DoS/DDoS,1,flow,knn_benign,0.9669246961070459
+LOFO_unseen_family,DoS/DDoS,1,flow,max_s6k,0.9917482870180054
+LOFO_unseen_family,DoS/DDoS,1,flow,efc_benign,0.8923010167105155
+LOFO_unseen_family,DoS/DDoS,1,flow+ctx,xgb_d6,0.9977911013421854
+LOFO_unseen_family,DoS/DDoS,1,flow+ctx,knn_benign,0.9840865463906932
+LOFO_unseen_family,DoS/DDoS,1,flow+ctx,max_s6k,0.9962451011263669
+LOFO_unseen_family,DoS/DDoS,1,flow+ctx,efc_benign,0.8451895762250268
+LOFO_unseen_family,DoS/DDoS,1,ctx,xgb_d6,0.8145272218511058
+LOFO_unseen_family,DoS/DDoS,1,ctx,knn_benign,0.9528941594898462
+LOFO_unseen_family,DoS/DDoS,1,ctx,max_s6k,0.940073906365617
+LOFO_unseen_family,DoS/DDoS,1,ctx,efc_benign,0.09860798810943024
+LOFO_unseen_family,PortScan,1,flow,xgb_d6,0.998620311
+LOFO_unseen_family,PortScan,1,flow,knn_benign,0.964752392
+LOFO_unseen_family,PortScan,1,flow,max_s6k,0.9975303638749999
+LOFO_unseen_family,PortScan,1,flow,efc_benign,0.03667306762499998
+LOFO_unseen_family,PortScan,1,flow+ctx,xgb_d6,0.9991009011249999
+LOFO_unseen_family,PortScan,1,flow+ctx,knn_benign,0.9994884345
+LOFO_unseen_family,PortScan,1,flow+ctx,max_s6k,0.999184275125
+LOFO_unseen_family,PortScan,1,flow+ctx,efc_benign,0.047750234249999995
+LOFO_unseen_family,PortScan,1,ctx,xgb_d6,0.9988606629999999
+LOFO_unseen_family,PortScan,1,ctx,knn_benign,0.9999163889999999
+LOFO_unseen_family,PortScan,1,ctx,max_s6k,0.99982895575
+LOFO_unseen_family,PortScan,1,ctx,efc_benign,0.21664424587499997
+LOFO_unseen_family,Web Attack,1,flow,xgb_d6,0.9979519353845674
+LOFO_unseen_family,Web Attack,1,flow,knn_benign,0.25057428798008785
+LOFO_unseen_family,Web Attack,1,flow,max_s6k,0.9945004410341354
+LOFO_unseen_family,Web Attack,1,flow,efc_benign,0.08518930998098515
+LOFO_unseen_family,Web Attack,1,flow+ctx,xgb_d6,0.9999532633662942
+LOFO_unseen_family,Web Attack,1,flow+ctx,knn_benign,0.9326273077271423
+LOFO_unseen_family,Web Attack,1,flow+ctx,max_s6k,0.9998951147676713
+LOFO_unseen_family,Web Attack,1,flow+ctx,efc_benign,0.06605632413593482
+LOFO_unseen_family,Web Attack,1,ctx,xgb_d6,0.9760019685034607
+LOFO_unseen_family,Web Attack,1,ctx,knn_benign,0.410973245434589
+LOFO_unseen_family,Web Attack,1,ctx,max_s6k,0.9489367395669437
+LOFO_unseen_family,Web Attack,1,ctx,efc_benign,0.08501034778910722
+random_known_families,-,1,flow,xgb_d6,0.9999509968500339
+random_known_families,-,1,flow,knn_benign,0.9582110378392561
+random_known_families,-,1,flow,max_s6k,0.9998031582653428
+random_known_families,-,1,flow,efc_benign,0.645140619531571
+random_known_families,-,1,flow+ctx,xgb_d6,0.9999758586229186
+random_known_families,-,1,flow+ctx,knn_benign,0.9885289492171191
+random_known_families,-,1,flow+ctx,max_s6k,0.9998405718401606
+random_known_families,-,1,flow+ctx,efc_benign,0.628711587918087
+random_known_families,-,1,ctx,xgb_d6,0.999650577830078
+random_known_families,-,1,ctx,knn_benign,0.9432001263196674
+random_known_families,-,1,ctx,max_s6k,0.999327779155692
+random_known_families,-,1,ctx,efc_benign,0.12285423578067738
+LOFO_unseen_family,Botnet,2,flow,xgb_d6,0.9441832653061224
+LOFO_unseen_family,Botnet,2,flow,knn_benign,0.9413197278911565
+LOFO_unseen_family,Botnet,2,flow,max_s6k,0.9293542857142857
+LOFO_unseen_family,Botnet,2,flow,efc_benign,0.9872342857142857
+LOFO_unseen_family,Botnet,2,flow+ctx,xgb_d6,0.8055217687074829
+LOFO_unseen_family,Botnet,2,flow+ctx,knn_benign,0.9502326530612244
+LOFO_unseen_family,Botnet,2,flow+ctx,max_s6k,0.9300795918367346
+LOFO_unseen_family,Botnet,2,flow+ctx,efc_benign,0.9828614965986394
+LOFO_unseen_family,Botnet,2,ctx,xgb_d6,0.6574590476190476
+LOFO_unseen_family,Botnet,2,ctx,knn_benign,0.7165979591836735
+LOFO_unseen_family,Botnet,2,ctx,max_s6k,0.7039172789115646
+LOFO_unseen_family,Botnet,2,ctx,efc_benign,0.3521421768707483
+LOFO_unseen_family,Brute Force,2,flow,xgb_d6,0.8098138523451324
+LOFO_unseen_family,Brute Force,2,flow,knn_benign,0.9792964305511738
+LOFO_unseen_family,Brute Force,2,flow,max_s6k,0.9643396741529227
+LOFO_unseen_family,Brute Force,2,flow,efc_benign,0.9127748367266877
+LOFO_unseen_family,Brute Force,2,flow+ctx,xgb_d6,0.9989129749456173
+LOFO_unseen_family,Brute Force,2,flow+ctx,knn_benign,0.9706037340418705
+LOFO_unseen_family,Brute Force,2,flow+ctx,max_s6k,0.997832431638099
+LOFO_unseen_family,Brute Force,2,flow+ctx,efc_benign,0.8692330436745537
+LOFO_unseen_family,Brute Force,2,ctx,xgb_d6,0.9737983687207141
+LOFO_unseen_family,Brute Force,2,ctx,knn_benign,0.622061973725137
+LOFO_unseen_family,Brute Force,2,ctx,max_s6k,0.9455792395720487
+LOFO_unseen_family,Brute Force,2,ctx,efc_benign,0.11582242068494396
+LOFO_unseen_family,DoS/DDoS,2,flow,xgb_d6,0.9840189779967935
+LOFO_unseen_family,DoS/DDoS,2,flow,knn_benign,0.9551637420352708
+LOFO_unseen_family,DoS/DDoS,2,flow,max_s6k,0.9905842879532187
+LOFO_unseen_family,DoS/DDoS,2,flow,efc_benign,0.8682572592596399
+LOFO_unseen_family,DoS/DDoS,2,flow+ctx,xgb_d6,0.9991777770184165
+LOFO_unseen_family,DoS/DDoS,2,flow+ctx,knn_benign,0.9861503918646715
+LOFO_unseen_family,DoS/DDoS,2,flow+ctx,max_s6k,0.998214516926334
+LOFO_unseen_family,DoS/DDoS,2,flow+ctx,efc_benign,0.8379528972601332
+LOFO_unseen_family,DoS/DDoS,2,ctx,xgb_d6,0.8495454606182685
+LOFO_unseen_family,DoS/DDoS,2,ctx,knn_benign,0.9558886240031242
+LOFO_unseen_family,DoS/DDoS,2,ctx,max_s6k,0.9492860208213434
+LOFO_unseen_family,DoS/DDoS,2,ctx,efc_benign,0.08788764377620654
+LOFO_unseen_family,PortScan,2,flow,xgb_d6,0.9987817546250002
+LOFO_unseen_family,PortScan,2,flow,knn_benign,0.967198198625
+LOFO_unseen_family,PortScan,2,flow,max_s6k,0.9979361871250001
+LOFO_unseen_family,PortScan,2,flow,efc_benign,0.04043166450000003
+LOFO_unseen_family,PortScan,2,flow+ctx,xgb_d6,0.9991699924999999
+LOFO_unseen_family,PortScan,2,flow+ctx,knn_benign,0.9995403104999999
+LOFO_unseen_family,PortScan,2,flow+ctx,max_s6k,0.998854624125
+LOFO_unseen_family,PortScan,2,flow+ctx,efc_benign,0.05267992475000001
+LOFO_unseen_family,PortScan,2,ctx,xgb_d6,0.99861320225
+LOFO_unseen_family,PortScan,2,ctx,knn_benign,0.9999635665
+LOFO_unseen_family,PortScan,2,ctx,max_s6k,0.999882358125
+LOFO_unseen_family,PortScan,2,ctx,efc_benign,0.217785634625
+LOFO_unseen_family,Web Attack,2,flow,xgb_d6,0.9971319272340856
+LOFO_unseen_family,Web Attack,2,flow,knn_benign,0.2355539242763302
+LOFO_unseen_family,Web Attack,2,flow,max_s6k,0.9948340091394112
+LOFO_unseen_family,Web Attack,2,flow,efc_benign,0.08397871422560706
+LOFO_unseen_family,Web Attack,2,flow+ctx,xgb_d6,0.999793294232635
+LOFO_unseen_family,Web Attack,2,flow+ctx,knn_benign,0.906735333628996
+LOFO_unseen_family,Web Attack,2,flow+ctx,max_s6k,0.9996093317451749
+LOFO_unseen_family,Web Attack,2,flow+ctx,efc_benign,0.0655433099392085
+LOFO_unseen_family,Web Attack,2,ctx,xgb_d6,0.9757600590421999
+LOFO_unseen_family,Web Attack,2,ctx,knn_benign,0.41064548412418256
+LOFO_unseen_family,Web Attack,2,ctx,max_s6k,0.9508039870421372
+LOFO_unseen_family,Web Attack,2,ctx,efc_benign,0.08147876805943449
+random_known_families,-,2,flow,xgb_d6,0.9999524694963475
+random_known_families,-,2,flow,knn_benign,0.9582647729481484
+random_known_families,-,2,flow,max_s6k,0.9998969170928154
+random_known_families,-,2,flow,efc_benign,0.6404215688882366
+random_known_families,-,2,flow+ctx,xgb_d6,0.999986399489503
+random_known_families,-,2,flow+ctx,knn_benign,0.9868938556748156
+random_known_families,-,2,flow+ctx,max_s6k,0.9999558663150752
+random_known_families,-,2,flow+ctx,efc_benign,0.6202005598023063
+random_known_families,-,2,ctx,xgb_d6,0.9996833788677025
+random_known_families,-,2,ctx,knn_benign,0.9436236065235638
+random_known_families,-,2,ctx,max_s6k,0.9994124154035721
+random_known_families,-,2,ctx,efc_benign,0.12489174609099138

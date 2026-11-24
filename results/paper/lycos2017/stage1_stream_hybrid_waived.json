@@ -1,0 +1,50 @@
+[
+  {
+    "budget": 0.05,
+    "seed": 0,
+    "guaranteed": [
+      "Botnet",
+      "DoS/DDoS",
+      "PortScan"
+    ],
+    "waived": [],
+    "uncertifiable": [],
+    "calib_benign_flag_rate": 0.14162599145820623
+  },
+  {
+    "budget": 0.1,
+    "seed": 0,
+    "guaranteed": [
+      "Botnet",
+      "DoS/DDoS",
+      "PortScan"
+    ],
+    "waived": [],
+    "uncertifiable": [],
+    "calib_benign_flag_rate": 0.1299954240390482
+  },
+  {
+    "budget": 0.05,
+    "seed": 1,
+    "guaranteed": [
+      "Botnet",
+      "DoS/DDoS",
+      "PortScan"
+    ],
+    "waived": [],
+    "uncertifiable": [],
+    "calib_benign_flag_rate": 0.11985204392922513
+  },
+  {
+    "budget": 0.1,
+    "seed": 1,
+    "guaranteed": [
+      "Botnet",
+      "DoS/DDoS",
+      "PortScan"
+    ],
+    "waived": [],
+    "uncertifiable": [],
+    "calib_benign_flag_rate": 0.11695393532641855
+  }
+]

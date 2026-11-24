@@ -1,0 +1,66 @@
+{
+  "created_utc": "2026-11-22T05:28:36Z",
+  "command": [
+    "scripts/run_cascade_openset.py",
+    "--data",
+    "C:/nids_data/lycos2017_canonical_dedup.csv",
+    "--name",
+    "lycos2017_cbv_0",
+    "--seeds",
+    "3",
+    "--cap-per-label",
+    "10000",
+    "--stage1-compute-budget",
+    "0"
+  ],
+  "python": "3.10.11",
+  "platform": "Windows-10-10.0.26200-SP0",
+  "git_commit": "6f521a8cf65753c277881877a4698c0350d3e7d9",
+  "git_dirty": true,
+  "packages": {
+    "numpy": "2.2.6",
+    "pandas": "2.3.3",
+    "scikit-learn": "1.7.2",
+    "xgboost": "3.2.0",
+    "scipy": "1.15.3",
+    "joblib": "1.5.3"
+  },
+  "seeds": [
+    0,
+    1,
+    2
+  ],
+  "inputs": [
+    {
+      "path": "C:\\nids_data\\lycos2017_canonical_dedup.csv",
+      "bytes": 441983442,
+      "sha256": "6f5fc327c9d808bdbb9939cfa4d801962b56acfc12e1cc383d03a4fbce78ea14"
+    }
+  ],
+  "outputs": [
+    {
+      "path": "C:\\Users\\ayush\\OneDrive\\Desktop\\Urop Project\\results\\paper\\lycos2017_cbv_0\\cascade_openset.csv",
+      "bytes": 467,
+      "sha256": "270f761ab7e6ae03c123d61585d91069ea12472b94be248f710efe36ae153ead"
+    }
+  ],
+  "extra": {
+    "data": "C:/nids_data/lycos2017_canonical_dedup.csv",
+    "name": "lycos2017_cbv_0",
+    "seeds": 3,
+    "miss_budget": 0.05,
+    "budget": 0.1,
+    "budgets": [
+      0.01,
+      0.02,
+      0.05,
+      0.1,
+      0.2
+    ],
+    "cap_per_label": 10000,
+    "stage1_kind": "hybrid",
+    "stage1_compute_budget": 0.0,
+    "stage2_trees": 200,
+    "max_unknown": 10000
+  }
+}

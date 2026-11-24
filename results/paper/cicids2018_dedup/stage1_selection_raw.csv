@@ -1,0 +1,73 @@
+protocol,heldout,seed,candidate,auroc
+LOFO_unseen_family,Botnet,0,iforest_benign,0.65742291127947
+LOFO_unseen_family,Botnet,0,xgb_d3,0.97022294741021
+LOFO_unseen_family,Botnet,0,xgb_d6,0.8695734483237015
+LOFO_unseen_family,Botnet,0,logreg,0.8655632636184709
+LOFO_unseen_family,Botnet,0,xgb_d3_plus_if,0.9309359334354997
+LOFO_unseen_family,Botnet,0,rank_avg,0.8896751443295533
+LOFO_unseen_family,Brute Force,0,iforest_benign,0.721752415269179
+LOFO_unseen_family,Brute Force,0,xgb_d3,0.5435467570619161
+LOFO_unseen_family,Brute Force,0,xgb_d6,0.6429220797161851
+LOFO_unseen_family,Brute Force,0,logreg,0.014563407248758611
+LOFO_unseen_family,Brute Force,0,xgb_d3_plus_if,0.5026658902820653
+LOFO_unseen_family,Brute Force,0,rank_avg,0.7183029654894837
+LOFO_unseen_family,DoS/DDoS,0,iforest_benign,0.8021854321711233
+LOFO_unseen_family,DoS/DDoS,0,xgb_d3,0.7706465528364267
+LOFO_unseen_family,DoS/DDoS,0,xgb_d6,0.6844347684007634
+LOFO_unseen_family,DoS/DDoS,0,logreg,0.4713396267591202
+LOFO_unseen_family,DoS/DDoS,0,xgb_d3_plus_if,0.7040649285365128
+LOFO_unseen_family,DoS/DDoS,0,rank_avg,0.8809353674946905
+LOFO_unseen_family,Infiltration,0,iforest_benign,0.5706450644448083
+LOFO_unseen_family,Infiltration,0,xgb_d3,0.5214508060682054
+LOFO_unseen_family,Infiltration,0,xgb_d6,0.6262393212347218
+LOFO_unseen_family,Infiltration,0,logreg,0.4046147249280645
+LOFO_unseen_family,Infiltration,0,xgb_d3_plus_if,0.5393477542662742
+LOFO_unseen_family,Infiltration,0,rank_avg,0.540985499046871
+LOFO_unseen_family,Web Attack,0,iforest_benign,0.8857899385560676
+LOFO_unseen_family,Web Attack,0,xgb_d3,0.7948160522273426
+LOFO_unseen_family,Web Attack,0,xgb_d6,0.8194573732718894
+LOFO_unseen_family,Web Attack,0,logreg,0.33867357910906304
+LOFO_unseen_family,Web Attack,0,xgb_d3_plus_if,0.9257703533026114
+LOFO_unseen_family,Web Attack,0,rank_avg,0.919229262672811
+random_known_families,-,0,iforest_benign,0.742054850827787
+random_known_families,-,0,xgb_d3,0.9682923747120855
+random_known_families,-,0,xgb_d6,0.9824471074247125
+random_known_families,-,0,logreg,0.8982298675060723
+random_known_families,-,0,xgb_d3_plus_if,0.9691168688127534
+random_known_families,-,0,rank_avg,0.9186783273067312
+LOFO_unseen_family,Botnet,1,iforest_benign,0.7031202200641153
+LOFO_unseen_family,Botnet,1,xgb_d3,0.9798054000559172
+LOFO_unseen_family,Botnet,1,xgb_d6,0.9710610461906246
+LOFO_unseen_family,Botnet,1,logreg,0.8640385941485681
+LOFO_unseen_family,Botnet,1,xgb_d3_plus_if,0.973459674595164
+LOFO_unseen_family,Botnet,1,rank_avg,0.9073641826050362
+LOFO_unseen_family,Brute Force,1,iforest_benign,0.7188179375583457
+LOFO_unseen_family,Brute Force,1,xgb_d3,0.7032183785653284
+LOFO_unseen_family,Brute Force,1,xgb_d6,0.5501451054204162
+LOFO_unseen_family,Brute Force,1,logreg,0.013910732683450281
+LOFO_unseen_family,Brute Force,1,xgb_d3_plus_if,0.5686534059027966
+LOFO_unseen_family,Brute Force,1,rank_avg,0.7883610189593168
+LOFO_unseen_family,DoS/DDoS,1,iforest_benign,0.821371618580734
+LOFO_unseen_family,DoS/DDoS,1,xgb_d3,0.7630919138389904
+LOFO_unseen_family,DoS/DDoS,1,xgb_d6,0.6930781081471661
+LOFO_unseen_family,DoS/DDoS,1,logreg,0.4823915037958969
+LOFO_unseen_family,DoS/DDoS,1,xgb_d3_plus_if,0.7081878960162306
+LOFO_unseen_family,DoS/DDoS,1,rank_avg,0.8814366336288227
+LOFO_unseen_family,Infiltration,1,iforest_benign,0.5730108690313079
+LOFO_unseen_family,Infiltration,1,xgb_d3,0.5306540922566367
+LOFO_unseen_family,Infiltration,1,xgb_d6,0.6151176315426996
+LOFO_unseen_family,Infiltration,1,logreg,0.40742761161039026
+LOFO_unseen_family,Infiltration,1,xgb_d3_plus_if,0.5182016079865408
+LOFO_unseen_family,Infiltration,1,rank_avg,0.5468507709509826
+LOFO_unseen_family,Web Attack,1,iforest_benign,0.8701482334869431
+LOFO_unseen_family,Web Attack,1,xgb_d3,0.7694942396313365
+LOFO_unseen_family,Web Attack,1,xgb_d6,0.7611655145929339
+LOFO_unseen_family,Web Attack,1,logreg,0.3540652841781874
+LOFO_unseen_family,Web Attack,1,xgb_d3_plus_if,0.7933479262672811
+LOFO_unseen_family,Web Attack,1,rank_avg,0.9032561443932412
+random_known_families,-,1,iforest_benign,0.7737796966888946
+random_known_families,-,1,xgb_d3,0.9692922864116154
+random_known_families,-,1,xgb_d6,0.9823577712689836
+random_known_families,-,1,logreg,0.9009278160878245
+random_known_families,-,1,xgb_d3_plus_if,0.9692405522475919
+random_known_families,-,1,rank_avg,0.9219424453457342

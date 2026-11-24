@@ -1,0 +1,7 @@
+family,rows,unique_rows,exact_duplicate_rows,duplicate_share,rows_in_conflicting_groups
+BENIGN,160000,139950,20050,0.1253,14582
+DoS/DDoS,92720,57628,35092,0.3785,24753
+Brute Force,40000,10058,29942,0.7486,28202
+Botnet,20000,10430,9570,0.4785,9990
+Infiltration,20000,13608,6392,0.3196,5951
+Web Attack,928,826,102,0.1099,275

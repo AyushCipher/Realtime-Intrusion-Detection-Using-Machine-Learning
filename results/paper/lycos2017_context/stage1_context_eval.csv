@@ -1,0 +1,73 @@
+protocol,heldout,candidate,features,mean,std
+LOFO_unseen_family,Botnet,efc_benign,ctx,0.348,0.003
+LOFO_unseen_family,Botnet,efc_benign,flow,0.986,0.001
+LOFO_unseen_family,Botnet,efc_benign,flow+ctx,0.98,0.003
+LOFO_unseen_family,Botnet,knn_benign,ctx,0.716,0.006
+LOFO_unseen_family,Botnet,knn_benign,flow,0.938,0.005
+LOFO_unseen_family,Botnet,knn_benign,flow+ctx,0.952,0.005
+LOFO_unseen_family,Botnet,max_s6k,ctx,0.705,0.001
+LOFO_unseen_family,Botnet,max_s6k,flow,0.914,0.016
+LOFO_unseen_family,Botnet,max_s6k,flow+ctx,0.93,0.007
+LOFO_unseen_family,Botnet,xgb_d6,ctx,0.674,0.015
+LOFO_unseen_family,Botnet,xgb_d6,flow,0.929,0.017
+LOFO_unseen_family,Botnet,xgb_d6,flow+ctx,0.698,0.125
+LOFO_unseen_family,Brute Force,efc_benign,ctx,0.127,0.011
+LOFO_unseen_family,Brute Force,efc_benign,flow,0.945,0.028
+LOFO_unseen_family,Brute Force,efc_benign,flow+ctx,0.912,0.037
+LOFO_unseen_family,Brute Force,knn_benign,ctx,0.624,0.002
+LOFO_unseen_family,Brute Force,knn_benign,flow,0.979,0.001
+LOFO_unseen_family,Brute Force,knn_benign,flow+ctx,0.969,0.001
+LOFO_unseen_family,Brute Force,max_s6k,ctx,0.946,0.001
+LOFO_unseen_family,Brute Force,max_s6k,flow,0.964,0.0
+LOFO_unseen_family,Brute Force,max_s6k,flow+ctx,0.999,0.001
+LOFO_unseen_family,Brute Force,xgb_d6,ctx,0.973,0.001
+LOFO_unseen_family,Brute Force,xgb_d6,flow,0.837,0.038
+LOFO_unseen_family,Brute Force,xgb_d6,flow+ctx,0.999,0.0
+LOFO_unseen_family,DoS/DDoS,efc_benign,ctx,0.093,0.005
+LOFO_unseen_family,DoS/DDoS,efc_benign,flow,0.876,0.014
+LOFO_unseen_family,DoS/DDoS,efc_benign,flow+ctx,0.841,0.004
+LOFO_unseen_family,DoS/DDoS,knn_benign,ctx,0.954,0.002
+LOFO_unseen_family,DoS/DDoS,knn_benign,flow,0.964,0.008
+LOFO_unseen_family,DoS/DDoS,knn_benign,flow+ctx,0.984,0.002
+LOFO_unseen_family,DoS/DDoS,max_s6k,ctx,0.943,0.006
+LOFO_unseen_family,DoS/DDoS,max_s6k,flow,0.992,0.002
+LOFO_unseen_family,DoS/DDoS,max_s6k,flow+ctx,0.998,0.001
+LOFO_unseen_family,DoS/DDoS,xgb_d6,ctx,0.788,0.079
+LOFO_unseen_family,DoS/DDoS,xgb_d6,flow,0.982,0.002
+LOFO_unseen_family,DoS/DDoS,xgb_d6,flow+ctx,0.999,0.001
+LOFO_unseen_family,PortScan,efc_benign,ctx,0.214,0.006
+LOFO_unseen_family,PortScan,efc_benign,flow,0.039,0.002
+LOFO_unseen_family,PortScan,efc_benign,flow+ctx,0.049,0.003
+LOFO_unseen_family,PortScan,knn_benign,ctx,1.0,0.0
+LOFO_unseen_family,PortScan,knn_benign,flow,0.966,0.001
+LOFO_unseen_family,PortScan,knn_benign,flow+ctx,0.999,0.0
+LOFO_unseen_family,PortScan,max_s6k,ctx,1.0,0.0
+LOFO_unseen_family,PortScan,max_s6k,flow,0.998,0.0
+LOFO_unseen_family,PortScan,max_s6k,flow+ctx,0.999,0.0
+LOFO_unseen_family,PortScan,xgb_d6,ctx,0.999,0.0
+LOFO_unseen_family,PortScan,xgb_d6,flow,0.999,0.0
+LOFO_unseen_family,PortScan,xgb_d6,flow+ctx,0.999,0.0
+LOFO_unseen_family,Web Attack,efc_benign,ctx,0.081,0.004
+LOFO_unseen_family,Web Attack,efc_benign,flow,0.084,0.001
+LOFO_unseen_family,Web Attack,efc_benign,flow+ctx,0.065,0.001
+LOFO_unseen_family,Web Attack,knn_benign,ctx,0.406,0.008
+LOFO_unseen_family,Web Attack,knn_benign,flow,0.24,0.009
+LOFO_unseen_family,Web Attack,knn_benign,flow+ctx,0.919,0.013
+LOFO_unseen_family,Web Attack,max_s6k,ctx,0.947,0.006
+LOFO_unseen_family,Web Attack,max_s6k,flow,0.995,0.0
+LOFO_unseen_family,Web Attack,max_s6k,flow+ctx,1.0,0.0
+LOFO_unseen_family,Web Attack,xgb_d6,ctx,0.975,0.001
+LOFO_unseen_family,Web Attack,xgb_d6,flow,0.997,0.0
+LOFO_unseen_family,Web Attack,xgb_d6,flow+ctx,1.0,0.0
+random_known_families,-,efc_benign,ctx,0.126,0.003
+random_known_families,-,efc_benign,flow,0.641,0.004
+random_known_families,-,efc_benign,flow+ctx,0.621,0.007
+random_known_families,-,knn_benign,ctx,0.943,0.001
+random_known_families,-,knn_benign,flow,0.958,0.0
+random_known_families,-,knn_benign,flow+ctx,0.988,0.001
+random_known_families,-,max_s6k,ctx,0.999,0.0
+random_known_families,-,max_s6k,flow,1.0,0.0
+random_known_families,-,max_s6k,flow+ctx,1.0,0.0
+random_known_families,-,xgb_d6,ctx,1.0,0.0
+random_known_families,-,xgb_d6,flow,1.0,0.0
+random_known_families,-,xgb_d6,flow+ctx,1.0,0.0

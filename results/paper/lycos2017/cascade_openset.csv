@@ -1,0 +1,8 @@
+gate,f_stage1_pass,f_escalated,f_alerted,known_escalated,benign_alerted,benign_flagged_stage1,f_escalated_seed_std
+efc,0.11,0.06,0.109,0.068,0.001,0.001,0.002
+energy,0.11,0.102,0.11,0.067,0.001,0.001,0.056
+knn,0.11,0.095,0.11,0.068,0.001,0.001,0.054
+mahalanobis,0.11,0.105,0.109,0.068,0.001,0.001,0.055
+maxlogit,0.11,0.102,0.11,0.067,0.001,0.001,0.056
+openset,0.11,0.102,0.11,0.068,0.001,0.001,0.056
+softmax,0.11,0.102,0.11,0.068,0.001,0.001,0.056

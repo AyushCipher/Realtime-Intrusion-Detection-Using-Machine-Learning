@@ -1,0 +1,70 @@
+{
+  "chronological": {
+    "train_benign_share": 0.581,
+    "test_attack_families": [
+      "Botnet",
+      "Infiltration"
+    ],
+    "iforest_all": {
+      "auroc_overall": 0.512,
+      "auroc_per_family": {
+        "Botnet": 0.533,
+        "Infiltration": 0.45
+      }
+    },
+    "iforest_benign": {
+      "auroc_overall": 0.482,
+      "auroc_per_family": {
+        "Botnet": 0.488,
+        "Infiltration": 0.463
+      }
+    },
+    "xgb_binary_small": {
+      "auroc_overall": 0.688,
+      "auroc_per_family": {
+        "Botnet": 0.726,
+        "Infiltration": 0.577
+      }
+    }
+  },
+  "random": {
+    "train_benign_share": 0.607,
+    "test_attack_families": [
+      "Botnet",
+      "Brute Force",
+      "DoS/DDoS",
+      "Infiltration",
+      "Web Attack"
+    ],
+    "iforest_all": {
+      "auroc_overall": 0.402,
+      "auroc_per_family": {
+        "Botnet": 0.317,
+        "Brute Force": 0.345,
+        "DoS/DDoS": 0.406,
+        "Infiltration": 0.478,
+        "Web Attack": 0.849
+      }
+    },
+    "iforest_benign": {
+      "auroc_overall": 0.634,
+      "auroc_per_family": {
+        "Botnet": 0.739,
+        "Brute Force": 0.801,
+        "DoS/DDoS": 0.609,
+        "Infiltration": 0.514,
+        "Web Attack": 0.882
+      }
+    },
+    "xgb_binary_small": {
+      "auroc_overall": 0.971,
+      "auroc_per_family": {
+        "Botnet": 0.999,
+        "Brute Force": 0.999,
+        "DoS/DDoS": 0.998,
+        "Infiltration": 0.804,
+        "Web Attack": 0.976
+      }
+    }
+  }
+}

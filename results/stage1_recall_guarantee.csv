@@ -1,0 +1,8 @@
+setting,miss_budget,guaranteed_miss_rate,attack_miss_rate,flag_rate,benign_flagged,accuracy,macro_f1
+baseline (IsolationForest boundary),,,0.0435,0.3892,6,0.9838,0.9426
+conformal,0.02,0.0175,0.0145,0.4162,9,0.9946,0.9518
+conformal,0.05,0.0351,0.0145,0.4054,7,0.9946,0.9518
+conformal,0.1,0.0877,0.087,0.3676,5,0.9676,0.8869
+conformal,0.15,0.1404,0.1739,0.3351,5,0.9351,0.7695
+conformal,0.2,0.193,0.2464,0.3027,4,0.9081,0.7487
+conformal,0.3,0.2982,0.4203,0.2324,3,0.8432,0.6057

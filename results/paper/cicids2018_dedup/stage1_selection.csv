@@ -1,0 +1,13 @@
+protocol,candidate,mean,std
+LOFO_unseen_family,iforest_benign,0.732,0.112
+LOFO_unseen_family,logreg,0.422,0.287
+LOFO_unseen_family,rank_avg,0.798,0.147
+LOFO_unseen_family,xgb_d3,0.735,0.166
+LOFO_unseen_family,xgb_d3_plus_if,0.716,0.183
+LOFO_unseen_family,xgb_d6,0.723,0.131
+random_known_families,iforest_benign,0.758,0.022
+random_known_families,logreg,0.9,0.002
+random_known_families,rank_avg,0.92,0.002
+random_known_families,xgb_d3,0.969,0.001
+random_known_families,xgb_d3_plus_if,0.969,0.0
+random_known_families,xgb_d6,0.982,0.0

@@ -1,0 +1,9 @@
+budget,method,miss_rate,benign_flag_rate,miss_Botnet,miss_Infiltration
+0.05,adaptive_d0,0.045,0.275,0.043,0.05
+0.05,adaptive_d1000,0.117,0.293,0.115,0.122
+0.05,per_family,0.148,0.249,0.0,0.582
+0.05,pooled,0.012,0.922,0.0,0.046
+0.1,adaptive_d0,0.095,0.263,0.093,0.1
+0.1,adaptive_d1000,0.239,0.275,0.227,0.275
+0.1,per_family,0.961,0.036,0.989,0.879
+0.1,pooled,0.023,0.875,0.0,0.091
