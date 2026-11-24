@@ -53,6 +53,14 @@ class TechniqueRetriever:
         corpus = [f"{e.category}. {e.name}. {e.description}" for e in self.entries]
         self._vectorizer = TfidfVectorizer(stop_words="english")
         self._matrix = self._vectorizer.fit_transform(corpus)
+        # A second index over the behaviour signatures only, so a behaviour
+        # query (behaviour.describe_flow) is not swamped by prose words.
+        # Bigrams keep phrases like "reset flag" and "no payload" distinct.
+        signatures = [e.signature for e in self.entries]
+        self._behaviour_vectorizer = None
+        if any(signatures):
+            self._behaviour_vectorizer = TfidfVectorizer(ngram_range=(1, 2))
+            self._behaviour_matrix = self._behaviour_vectorizer.fit_transform(signatures)
 
     def retrieve(self, query: str, top_k: int = 3, min_score: float = 0.0) -> List[RetrievalResult]:
         """Returns up to `top_k` entries most similar to `query`, sorted by
@@ -74,3 +82,17 @@ class TechniqueRetriever:
         query built from the alert's SHAP explanation.
         """
         return self.retrieve(category, top_k=top_k, min_score=min_score)
+
+    def retrieve_by_behaviour(self, behaviour: str, top_k: int = 3, min_score: float = 0.0) -> List[RetrievalResult]:
+        """Matches a behaviour description against the entries' `signature`
+        fields. Empty list when there is no description or no signatures."""
+        if not behaviour or self._behaviour_vectorizer is None:
+            return []
+        query_vec = self._behaviour_vectorizer.transform([behaviour])
+        scores = cosine_similarity(query_vec, self._behaviour_matrix)[0]
+        order = scores.argsort()[::-1][:top_k]
+        return [
+            RetrievalResult(entry=self.entries[i], score=float(scores[i]))
+            for i in order
+            if scores[i] > 0 and scores[i] >= min_score
+        ]

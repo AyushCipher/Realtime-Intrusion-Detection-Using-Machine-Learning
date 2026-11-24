@@ -99,3 +99,20 @@ def test_explain_handles_missing_optional_alert_fields():
     reasoner = Tier2Reasoner(client, use_rag=True)
     explanation = reasoner.explain(minimal_alert)
     assert explanation.suspected_technique_id == "T1046"
+
+
+def test_weak_retrieval_matches_are_dropped_before_prompting():
+    from ids_tier2.llm_client import StubLLMClient
+
+    captured = {}
+
+    class Capture(StubLLMClient):
+        def complete(self, system_prompt, user_prompt):
+            captured["prompt"] = user_prompt
+            return super().complete(system_prompt, user_prompt)
+
+    alert = {"stage2_predicted_class": "Web Attack", "stage2_confidence": 0.9, "severity": "high", "unknown_mass": 0.4}
+    Tier2Reasoner(Capture(), use_rag=True, min_relative_score=0.5).explain(alert)
+    assert "T1190" in captured["prompt"] and "T1499" not in captured["prompt"]
+    Tier2Reasoner(Capture(), use_rag=True, min_relative_score=0.0).explain(alert)
+    assert "T1499" in captured["prompt"]

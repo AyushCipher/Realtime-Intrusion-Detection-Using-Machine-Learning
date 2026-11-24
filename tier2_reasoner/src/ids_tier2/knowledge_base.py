@@ -38,6 +38,12 @@ class TechniqueEntry:
     tactic: str
     category: Category  # which of this project's attack families this technique grounds
     description: str
+    # Observable flow-level behaviour, in the controlled vocabulary that
+    # behaviour.describe_flow() emits, for retrieval when the predicted class
+    # cannot be trusted (see behaviour.py). Written from the ATT&CK technique
+    # descriptions and general traffic knowledge, before evaluating on any
+    # real escalated alerts, and not tuned afterwards.
+    signature: str = ""
 
 
 KNOWLEDGE_BASE: List[TechniqueEntry] = [
@@ -53,6 +59,7 @@ KNOWLEDGE_BASE: List[TechniqueEntry] = [
             "a single or several sources; reflection/amplification attacks abuse intermediary servers to "
             "multiply attacker-controlled traffic before it reaches the target."
         ),
+        signature="high packet rate, high byte rate, many packets, short gaps between packets, mostly one direction, little server response, flood",
     ),
     TechniqueEntry(
         technique_id="T1499",
@@ -65,6 +72,7 @@ KNOWLEDGE_BASE: List[TechniqueEntry] = [
             "large volume of slow or malformed application-layer requests (application exhaustion flood), "
             "rather than saturating raw network bandwidth."
         ),
+        signature="many requests, long duration, slow, low byte rate, connection kept open, small packets, push flag, little server response, exhaustion",
     ),
     TechniqueEntry(
         technique_id="T1110",
@@ -77,6 +85,7 @@ KNOWLEDGE_BASE: List[TechniqueEntry] = [
             "passwords for one or a few known accounts (e.g. against SSH or FTP); password spraying "
             "attempts one or a few common passwords across many accounts to avoid account lockouts."
         ),
+        signature="short connection, few packets, small payload, repeated login attempts, connection closed, fin flag, reset flag, server replies, authentication",
     ),
     TechniqueEntry(
         technique_id="T1190",
@@ -90,6 +99,7 @@ KNOWLEDGE_BASE: List[TechniqueEntry] = [
             "(unsanitized input reaching a database query) or cross-site scripting (unsanitized input "
             "reflected back into a page as executable script)."
         ),
+        signature="large client payload, large forward packets, push flag, web request, server replies, application data, request content",
     ),
     TechniqueEntry(
         technique_id="T1046",
@@ -102,6 +112,7 @@ KNOWLEDGE_BASE: List[TechniqueEntry] = [
             "protocols across a target range -- a port scan. This is frequently a reconnaissance step "
             "preceding a more targeted intrusion attempt."
         ),
+        signature="very short connection, very few packets, no payload, syn flag, reset flag, connection refused, probe, no server response",
     ),
     TechniqueEntry(
         technique_id="T1210",
@@ -116,6 +127,7 @@ KNOWLEDGE_BASE: List[TechniqueEntry] = [
             "infiltration traffic often co-occurs with discovery-like scanning patterns from the same "
             "internal host shortly after the initial exploit."
         ),
+        signature="internal connection, moderate duration, bidirectional exchange, server replies, application data, push flag, exploitation",
     ),
     TechniqueEntry(
         technique_id="T1071.001",
@@ -129,6 +141,7 @@ KNOWLEDGE_BASE: List[TechniqueEntry] = [
             "periodic, low-volume beaconing rather than the burst patterns typical of DoS or brute-force "
             "traffic."
         ),
+        signature="small packets, low byte rate, regular gaps between packets, push flag, short connection, beacon, server replies, low volume",
     ),
 ]
 

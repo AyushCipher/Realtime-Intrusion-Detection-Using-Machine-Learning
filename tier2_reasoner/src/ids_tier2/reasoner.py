@@ -11,6 +11,7 @@ import re
 from dataclasses import dataclass
 from typing import Any, Dict, List, Optional
 
+from .behaviour import describe_flow
 from .llm_client import LLMClient
 from .retrieval import RetrievalResult, TechniqueRetriever
 
@@ -40,7 +41,7 @@ class Explanation:
     model_version: str
 
 
-def build_user_prompt(alert: Dict[str, Any], retrieved: List[RetrievalResult]) -> str:
+def build_user_prompt(alert: Dict[str, Any], retrieved: List[RetrievalResult], behaviour: str = "") -> str:
     confidence = alert.get("stage2_confidence") or 0.0
     unknown_mass = alert.get("unknown_mass") or 0.0
     lines = [
@@ -53,6 +54,16 @@ def build_user_prompt(alert: Dict[str, Any], retrieved: List[RetrievalResult]) -
     if top_features:
         feat_str = ", ".join(f"{f.get('feature')}={f.get('value')}" for f in top_features[:5])
         lines.append(f"Top contributing features (SHAP): {feat_str}.")
+
+    if behaviour:
+        # Behaviour-keyed retrieval is only used when the predicted category
+        # is untrustworthy (an escalated, unfamiliar flow), so say so: the
+        # model should weigh the flow's behaviour over the label.
+        lines.append(
+            "This flow was escalated as unlike any known category, so the predicted category may be wrong. "
+            f"Observed behaviour: {behaviour}. The reference techniques below were retrieved by matching this "
+            "behaviour, not the predicted category."
+        )
 
     if retrieved:
         lines.append("Reference techniques (retrieved, ranked by relevance):")
@@ -72,11 +83,26 @@ class Tier2Reasoner:
         retriever: Optional[TechniqueRetriever] = None,
         use_rag: bool = True,
         top_k: int = 3,
+        min_relative_score: float = 0.5,
+        retrieval_mode: str = "class",
     ) -> None:
         self.llm_client = llm_client
         self.retriever = retriever or TechniqueRetriever()
         self.use_rag = use_rag
         self.top_k = top_k
+        # Retrieved techniques scoring below this fraction of the best match are dropped before
+        # prompting. Weak matches act as distractors: in the H3 v2 live run, Web Attack alerts
+        # retrieved T1190 (score 0.24) plus T1499 (0.08), and the model picked T1499 in 19 of 20
+        # trials. 0.0 keeps every top_k result (the previous behaviour).
+        self.min_relative_score = min_relative_score
+        # "class": key retrieval on stage2_predicted_class (the original
+        # behaviour). "behaviour": key it on behaviour.describe_flow(alert).
+        # "auto": behaviour for flows whose class cannot be trusted (escalated
+        # by the open-set gate, or predicted BENIGN yet alerting), class
+        # otherwise, falling back to class when no behaviour phrase applies.
+        if retrieval_mode not in ("class", "behaviour", "auto"):
+            raise ValueError("retrieval_mode must be 'class', 'behaviour' or 'auto'")
+        self.retrieval_mode = retrieval_mode
 
     def explain(self, alert: Dict[str, Any]) -> Explanation:
         """Retrieves grounding context (unless `use_rag=False` -- the H3
@@ -88,11 +114,14 @@ class Tier2Reasoner:
         useful to an analyst than none.
         """
         retrieved: List[RetrievalResult] = []
+        behaviour = ""
         if self.use_rag:
-            query = str(alert.get("stage2_predicted_class", ""))
-            retrieved = self.retriever.retrieve(query, top_k=self.top_k)
+            retrieved, behaviour = self._retrieve(alert)
+            if retrieved and retrieved[0].score > 0:
+                floor = self.min_relative_score * retrieved[0].score
+                retrieved = [r for r in retrieved if r.score >= floor]
 
-        user_prompt = build_user_prompt(alert, retrieved)
+        user_prompt = build_user_prompt(alert, retrieved, behaviour=behaviour)
         response = self.llm_client.complete(SYSTEM_PROMPT, user_prompt)
         parsed = self._parse_response(response.text)
 
@@ -106,6 +135,17 @@ class Tier2Reasoner:
             llm_latency_ms=response.latency_ms,
             model_version=response.model_name,
         )
+
+    def _retrieve(self, alert: Dict[str, Any]):
+        """Returns (results, behaviour description used, or "")."""
+        class_untrusted = bool(alert.get("escalated")) or alert.get("stage2_predicted_class") == "BENIGN"
+        if self.retrieval_mode == "behaviour" or (self.retrieval_mode == "auto" and class_untrusted):
+            behaviour = describe_flow(alert)
+            results = self.retriever.retrieve_by_behaviour(behaviour, top_k=self.top_k)
+            if results or self.retrieval_mode == "behaviour":
+                return results, behaviour if results else ""
+        query = str(alert.get("stage2_predicted_class", ""))
+        return self.retriever.retrieve(query, top_k=self.top_k), ""
 
     @staticmethod
     def _parse_response(text: str) -> Dict[str, str]:
