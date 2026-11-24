@@ -32,9 +32,11 @@ from .pipeline import TwoStageDetector
 from .schema import ALERT_TOPIC, FLOW_TOPIC
 from .scoring_service import ScoringService, ScoringServiceConfig
 from .softmax_gate import SoftmaxGate
-from .stage1_iforest import AnomalyPreFilter
+from .stage1_hybrid import load_stage1
+from .stage1_iforest import AnomalyPreFilter  # noqa: F401 - kept for callers importing it from here
 from .stage2_xgboost import AttackClassifier
-from .train import ESCALATION_GATE_FILENAME, ESCALATION_KIND_FILENAME, GATE_TYPE_FILENAME, OPENSET_GATE_FILENAME
+from .ood_gates import KNNGate
+from .train import ESCALATION_GATE_FILENAME, ESCALATION_KIND_FILENAME, GATE_TYPE_FILENAME, KNN_GATE_FILENAME, OPENSET_GATE_FILENAME
 
 logger = logging.getLogger("ids_ml.serve")
 
@@ -52,6 +54,8 @@ def load_gate(model_dir: Path, stage2: AttackClassifier):
         gate = OpenMaxHead.load(model_dir / OPENSET_GATE_FILENAME, stage2)
     elif gate_type == "softmax":
         gate = SoftmaxGate(stage2)
+    elif gate_type == "knn":
+        gate = KNNGate.load(model_dir / KNN_GATE_FILENAME, stage2)
     else:
         raise ValueError(f"unknown gate type in {gate_type_path}: {gate_type!r}")
 
@@ -101,7 +105,7 @@ def main(argv=None) -> int:
     )
 
     model_dir = Path(args.model_dir)
-    stage1 = AnomalyPreFilter.load(model_dir / "stage1_iforest.joblib")
+    stage1 = load_stage1(model_dir / "stage1_iforest.joblib")
     stage2 = AttackClassifier.load(model_dir / "stage2_xgboost.joblib")
 
     gate, escalation_gate, escalation_trigger_name = load_gate(model_dir, stage2)

@@ -33,6 +33,12 @@ class SoftmaxGate:
     def __init__(self, classifier) -> None:
         self.classifier = classifier
 
+    def scores(self, X: np.ndarray) -> np.ndarray:
+        """unknown_mass for every row, without building per-row results."""
+        if len(X) == 0:
+            return np.array([])
+        return 1.0 - self.classifier.predict_proba(X).max(axis=1)
+
     def recalibrate_batch(self, X: np.ndarray) -> List[GateResult]:
         proba = self.classifier.predict_proba(X)
         classes = self.classifier.classes_

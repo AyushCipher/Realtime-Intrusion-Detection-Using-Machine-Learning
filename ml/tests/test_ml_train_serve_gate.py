@@ -59,16 +59,14 @@ def test_train_without_gate_writes_no_gate_artifacts(tmp_path):
     assert not (model_dir / train.GATE_TYPE_FILENAME).exists()
 
 
-@pytest.mark.parametrize("gate", ["softmax", "openset"])
+@pytest.mark.parametrize("gate", ["softmax", "openset", "knn"])
 def test_train_with_gate_writes_expected_artifacts(tmp_path, gate):
     model_dir = _train_with_gate(tmp_path, gate)
     assert (model_dir / train.GATE_TYPE_FILENAME).read_text().strip() == gate
     assert (model_dir / train.ESCALATION_GATE_FILENAME).exists()
     assert (model_dir / train.ESCALATION_KIND_FILENAME).read_text().strip() == "static"
-    if gate == "openset":
-        assert (model_dir / train.OPENSET_GATE_FILENAME).exists()
-    else:
-        assert not (model_dir / train.OPENSET_GATE_FILENAME).exists()
+    assert (model_dir / train.OPENSET_GATE_FILENAME).exists() == (gate == "openset")
+    assert (model_dir / train.KNN_GATE_FILENAME).exists() == (gate == "knn")
 
 
 def test_train_with_adaptive_escalation_writes_adaptive_kind(tmp_path):
@@ -124,7 +122,7 @@ def test_serve_load_gate_reconstructs_a_working_adaptive_detector(tmp_path):
     assert escalation_gate.alpha_t != alpha_before
 
 
-@pytest.mark.parametrize("gate", ["softmax", "openset"])
+@pytest.mark.parametrize("gate", ["softmax", "openset", "knn"])
 def test_serve_load_gate_reconstructs_a_working_detector(tmp_path, gate):
     model_dir = _train_with_gate(tmp_path, gate)
 

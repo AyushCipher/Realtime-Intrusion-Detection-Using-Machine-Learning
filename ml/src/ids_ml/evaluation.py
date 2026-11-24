@@ -21,10 +21,16 @@ from sklearn.metrics import brier_score_loss, precision_recall_fscore_support, r
 from scipy.stats import wilcoxon
 
 from .adaptive_conformal_gate import AdaptiveConformalGate
+from .adaptive_stage1 import AdaptiveStage1Threshold
 from .conformal_gate import calibrate_threshold
+from .conformal_stage1 import calibrate_stage1_threshold
+from .drift_recalibration import DetectThenRecalibrate
+from .ood_gates import OOD_GATES
 from .openset_head import OpenMaxConfig, OpenMaxHead
 from .softmax_gate import SoftmaxGate
 from .split import leave_one_family_out, random_holdout, random_split, time_based_split
+from .stage1_hybrid import HybridConfig, HybridPreFilter
+from .stage1_iforest import AnomalyPreFilter, Stage1Config
 from .stage2_xgboost import AttackClassifier, Stage2Config
 
 
@@ -207,13 +213,20 @@ def adversarial_robustness_report(
 # almost by construction. See ml/README.md's open-set section.
 
 _GATE_NAMES = ("softmax", "openset")
+# Every gate `_fit_gate` can build. H1 as originally run used only
+# _GATE_NAMES; the stronger OOD baselines (ood_gates.py) are opt-in through
+# `gate_names` so earlier results and tests stay reproducible unchanged.
+ALL_GATE_NAMES = _GATE_NAMES + tuple(OOD_GATES)
+# Gates whose unknown_mass is a probability in [0, 1]; ECE and Brier are
+# only meaningful for these.
+_BOUNDED_GATES = {"softmax", "openset"}
 
 
 @dataclass
 class OpenSetTrialResult:
     family: str
     seed: int
-    gate_name: str  # "softmax" | "openset"
+    gate_name: str  # one of ALL_GATE_NAMES
     n_known_calib: int
     n_known_test: int
     n_unknown_test: int
@@ -221,16 +234,73 @@ class OpenSetTrialResult:
     unknown_recall: float  # fraction of held-out-family test rows escalated
     unknown_auroc: float  # unknown_mass as a score distinguishing known vs held-out-family test rows
     open_auc: float  # stricter joint correct-classification + confidence-ranking metric -- see open_auc()
-    ece: float
-    brier: float
+    ece: float  # NaN for gates whose score is not a probability (see _BOUNDED_GATES)
+    brier: float  # same
+    open_auc_score: float = float("nan")  # OpenAUC ranked by the gate's own novelty score -- see open_auc_from_scores()
+    # Unknown recall at the threshold where exactly `budget` of the TEST
+    # known rows escalate. Conformal thresholds overshoot by different
+    # amounts per gate under drift (e.g. kNN escalates far more known
+    # traffic than its budget), so `unknown_recall` compares gates at
+    # unequal false-alarm rates; this compares them at the same one. It is
+    # an oracle operating point (uses test labels), for comparison only.
+    recall_at_matched_fpr: float = float("nan")
 
 
-def _fit_gate(gate_name: str, stage2: AttackClassifier, X_fit, y_fit):
+def _fit_gate(gate_name: str, stage2: AttackClassifier, X_fit, y_fit, seed: int = 0):
     if gate_name == "softmax":
         return SoftmaxGate(stage2)
     if gate_name == "openset":
         return OpenMaxHead(stage2, OpenMaxConfig()).fit(X_fit, y_fit)
+    if gate_name in ("knn", "efc"):
+        return OOD_GATES[gate_name](stage2, random_state=seed).fit(X_fit, y_fit)
+    if gate_name in OOD_GATES:
+        return OOD_GATES[gate_name](stage2).fit(X_fit, y_fit)
     raise ValueError(f"unknown gate_name: {gate_name!r}")
+
+
+def _gate_scores(gate, X: np.ndarray) -> np.ndarray:
+    """unknown_mass for every row of X. Uses the gate's vectorised
+    `scores()` when it has one: building a GateResult (with a dict of class
+    probabilities) per row costs about a kilobyte each, which at real-data
+    sizes (hundreds of thousands of rows x several gates) exhausts memory.
+    OpenMax has no vectorised form, so it falls back to the batch path."""
+    if len(X) == 0:
+        return np.array([])
+    if hasattr(gate, "scores"):
+        return np.asarray(gate.scores(X), dtype=float)
+    return np.array([r.unknown_mass for r in gate.recalibrate_batch(X)])
+
+
+def open_auc_from_scores(
+    known_true_labels: Sequence[str],
+    known_predicted_labels: Sequence[str],
+    known_scores: Sequence[float],
+    unknown_scores: Sequence[float],
+) -> float:
+    """OpenAUC (Wang et al., NeurIPS 2022) with each gate's own novelty
+    score as the open-set ranking, so gates are compared on the score they
+    actually escalate on:
+
+    OpenAUC = mean over (correctly classified known i, unknown j) pairs of
+              1[ score_i < score_j ]
+
+    A misclassified known row contributes no wins, as in `open_auc`. That
+    function ranks by the gate's known-class probabilities instead, which
+    makes every OOD gate in ood_gates.py score identically to softmax (they
+    share Stage 2's probabilities) -- hence this score-based variant for
+    cross-gate comparisons. For the softmax gate the two coincide.
+    """
+    known_true = np.asarray(list(known_true_labels))
+    known_pred = np.asarray(list(known_predicted_labels))
+    known_scores = np.asarray(known_scores, dtype=float)
+    unknown_scores = np.sort(np.asarray(unknown_scores, dtype=float))
+    correct = known_scores[known_true == known_pred]
+    if len(correct) == 0 or len(unknown_scores) == 0:
+        return float("nan")
+    # For each correct known score, count unknown scores strictly above it;
+    # sorting turns the pairwise comparison into one searchsorted call.
+    wins = len(unknown_scores) - np.searchsorted(unknown_scores, correct, side="right")
+    return float(wins.sum() / (len(correct) * len(unknown_scores)))
 
 
 def expected_calibration_error(y_true: Sequence[int], y_score: Sequence[float], n_bins: int = 10) -> float:
@@ -296,10 +366,11 @@ def open_auc(
         return float("nan")
 
     correct_known_scores = np.asarray(correct_known_scores)
-    unknown_max_scores = np.asarray(unknown_max_scores)
-    # Broadcast compare every (known, unknown) pair at once rather than a
-    # nested Python loop -- fine at this project's evaluation-set sizes.
-    wins = (correct_known_scores[:, None] > unknown_max_scores[None, :]).sum()
+    unknown_max_scores = np.sort(np.asarray(unknown_max_scores))
+    # For each correct known score, count unknown scores strictly below it.
+    # A pairwise broadcast needs n_known x n_unknown memory (about 2 GB at
+    # real-data sizes); sorting gives the same count in O(n log n).
+    wins = np.searchsorted(unknown_max_scores, correct_known_scores, side="left").sum()
     return float(wins / (len(correct_known_scores) * len(unknown_max_scores)))
 
 
@@ -314,8 +385,10 @@ def run_openset_trial(
     timestamp_col: str = "timestamp",
     train_frac: float = 0.7,
     stage2_n_estimators: int = 300,
+    gate_names: Sequence[str] = _GATE_NAMES,
 ) -> List[OpenSetTrialResult]:
-    """One leave-one-family-out fold at one seed, both gates head-to-head.
+    """One leave-one-family-out fold at one seed, every gate in `gate_names`
+    head-to-head on the same fitted Stage 2.
 
     `train` (from `split.leave_one_family_out`) is further split into a
     stage-2 *fit* portion and a *calibration* portion (`split.
@@ -342,39 +415,64 @@ def run_openset_trial(
     X_known_test = known_test[feature_cols].to_numpy()
     X_unknown_test = unknown_test[feature_cols].to_numpy()
 
-    results: List[OpenSetTrialResult] = []
-    for gate_name in _GATE_NAMES:
-        gate = _fit_gate(gate_name, stage2, X_fit, y_fit)
+    known_true = known_test[label_col].tolist()
+    # Every gate except OpenMax shares Stage 2's closed-set prediction.
+    stage2_known_pred = list(stage2.predict(X_known_test)) if len(X_known_test) else []
 
-        calib_scores = [r.unknown_mass for r in gate.recalibrate_batch(X_calib)] if len(X_calib) else []
+    results: List[OpenSetTrialResult] = []
+    for gate_name in gate_names:
+        gate = _fit_gate(gate_name, stage2, X_fit, y_fit, seed=seed)
+
+        calib_scores = list(_gate_scores(gate, X_calib))
         conformal = calibrate_threshold(calib_scores, budget=budget) if calib_scores else None
 
-        known_gate_results = gate.recalibrate_batch(X_known_test) if len(X_known_test) else []
-        unknown_gate_results = gate.recalibrate_batch(X_unknown_test) if len(X_unknown_test) else []
-        known_um = np.array([r.unknown_mass for r in known_gate_results])
-        unknown_um = np.array([r.unknown_mass for r in unknown_gate_results])
-
-        oauc = open_auc(
-            known_test[label_col].tolist(),
-            [r.known_class_probabilities for r in known_gate_results],
-            [r.known_class_probabilities for r in unknown_gate_results],
-        )
+        if gate_name in _BOUNDED_GATES:
+            # The legacy probability-based open_auc needs per-row class
+            # probabilities; only these two gates have distinct ones.
+            known_gate_results = gate.recalibrate_batch(X_known_test) if len(X_known_test) else []
+            unknown_gate_results = gate.recalibrate_batch(X_unknown_test) if len(X_unknown_test) else []
+            known_um = np.array([r.unknown_mass for r in known_gate_results])
+            unknown_um = np.array([r.unknown_mass for r in unknown_gate_results])
+            known_pred = [r.predicted_class for r in known_gate_results]
+            oauc = open_auc(
+                known_true,
+                [r.known_class_probabilities for r in known_gate_results],
+                [r.known_class_probabilities for r in unknown_gate_results],
+            )
+            del known_gate_results, unknown_gate_results
+        else:
+            known_um = _gate_scores(gate, X_known_test)
+            unknown_um = _gate_scores(gate, X_unknown_test)
+            known_pred = stage2_known_pred
+            # Ranked by Stage 2's probabilities, this would equal softmax's
+            # value by construction; open_auc_score is the meaningful one.
+            oauc = float("nan")
 
         if conformal is not None and len(known_um):
-            escalation_rate_on_known = float(np.mean([conformal.should_escalate(s) for s in known_um]))
+            escalation_rate_on_known = float(np.mean(known_um > conformal.threshold))
         else:
             escalation_rate_on_known = float("nan")
         if conformal is not None and len(unknown_um):
-            unknown_recall = float(np.mean([conformal.should_escalate(s) for s in unknown_um]))
+            unknown_recall = float(np.mean(unknown_um > conformal.threshold))
         else:
             unknown_recall = float("nan")
+
+        oauc_score = open_auc_from_scores(known_true, known_pred, known_um, unknown_um)
+        if len(known_um) and len(unknown_um):
+            matched_threshold = float(np.quantile(known_um, 1.0 - budget, method="higher"))
+            recall_at_matched_fpr = float(np.mean(unknown_um > matched_threshold))
+        else:
+            recall_at_matched_fpr = float("nan")
 
         y_true = np.concatenate([np.zeros(len(known_um)), np.ones(len(unknown_um))])
         y_score = np.concatenate([known_um, unknown_um])
         if len(known_um) and len(unknown_um):
             auroc = float(roc_auc_score(y_true, y_score))
-            brier = float(brier_score_loss(y_true, y_score))
-            ece = expected_calibration_error(y_true, y_score)
+            if gate_name in _BOUNDED_GATES:
+                brier = float(brier_score_loss(y_true, y_score))
+                ece = expected_calibration_error(y_true, y_score)
+            else:
+                brier = ece = float("nan")
         else:
             auroc = brier = ece = float("nan")
 
@@ -392,6 +490,8 @@ def run_openset_trial(
                 open_auc=oauc,
                 ece=ece,
                 brier=brier,
+                open_auc_score=oauc_score,
+                recall_at_matched_fpr=recall_at_matched_fpr,
             )
         )
     return results
@@ -408,12 +508,14 @@ def openset_vs_softmax_report(
     timestamp_col: str = "timestamp",
     train_frac: float = 0.7,
     stage2_n_estimators: int = 300,
+    gate_names: Sequence[str] = _GATE_NAMES,
 ) -> pd.DataFrame:
-    """Runs `run_openset_trial` for every (family, seed) pair, both gates --
-    the full leave-one-family-out rotation, repeated across seeds so a
-    single lucky/unlucky train/calibration split doesn't decide the result.
-    One row per (family, seed, gate). See `openset_vs_softmax_significance`
-    for the paired comparison on top of this raw table.
+    """Runs `run_openset_trial` for every (family, seed) pair, every gate in
+    `gate_names` -- the full leave-one-family-out rotation, repeated across
+    seeds so a single lucky/unlucky train/calibration split doesn't decide
+    the result. One row per (family, seed, gate). See
+    `openset_vs_softmax_significance` and `paired_gate_significance` for
+    the paired comparisons on top of this raw table.
     """
     if families is None:
         families = sorted(f for f in df[label_col].unique() if f != "BENIGN")
@@ -431,9 +533,54 @@ def openset_vs_softmax_report(
                 timestamp_col=timestamp_col,
                 train_frac=train_frac,
                 stage2_n_estimators=stage2_n_estimators,
+                gate_names=gate_names,
             ):
                 rows.append(asdict(result))
     return pd.DataFrame(rows)
+
+
+def paired_gate_significance(
+    report_df: pd.DataFrame,
+    gate_a: str,
+    gate_b: str,
+    metric: str = "unknown_recall",
+    cluster_col: str = "family",
+) -> Dict[str, object]:
+    """Paired comparison of two gates that respects how the trials cluster.
+
+    Seeds within one held-out family share the same unknown attack, so
+    they are not independent: 5 families x 5 seeds is closer to 5
+    observations than 25. `openset_vs_softmax_significance` pairs by
+    (family, seed) and so overstates the evidence. This function first
+    averages each gate's `metric` over seeds within each `cluster_col`
+    value, then runs a Wilcoxon signed-rank test over the clusters, and
+    also reports a sign count (clusters where a beats b). The number of
+    held-out families is the honest sample size; adding families (more
+    datasets, or finer raw-label LOFO) is what raises it.
+    """
+    sub = report_df[report_df["gate_name"].isin([gate_a, gate_b])]
+    per_cluster = sub.groupby([cluster_col, "gate_name"])[metric].mean().unstack("gate_name").dropna()
+    n = len(per_cluster)
+    out: Dict[str, object] = {
+        "metric": metric,
+        "gate_a": gate_a,
+        "gate_b": gate_b,
+        "n_clusters": n,
+        "a_mean": float(per_cluster[gate_a].mean()) if n else float("nan"),
+        "b_mean": float(per_cluster[gate_b].mean()) if n else float("nan"),
+    }
+    if n == 0:
+        out.update(statistic=float("nan"), p_value=float("nan"), a_wins=0, b_wins=0, note="no complete clusters")
+        return out
+    diffs = per_cluster[gate_a] - per_cluster[gate_b]
+    out["a_wins"] = int((diffs > 0).sum())
+    out["b_wins"] = int((diffs < 0).sum())
+    if n < 2 or (diffs == 0).all():
+        out.update(statistic=float("nan"), p_value=float("nan"), note="too few clusters or no differences")
+    else:
+        statistic, p_value = wilcoxon(per_cluster[gate_a], per_cluster[gate_b])
+        out.update(statistic=float(statistic), p_value=float(p_value), note="")
+    return out
 
 
 def openset_vs_softmax_significance(report_df: pd.DataFrame, metric: str = "unknown_recall") -> Dict[str, object]:
@@ -531,13 +678,9 @@ def escalation_budget_sweep_trial(
     for gate_name in _GATE_NAMES:
         gate = _fit_gate(gate_name, stage2, X_fit, y_fit)
 
-        calib_scores = [r.unknown_mass for r in gate.recalibrate_batch(X_calib)] if len(X_calib) else []
-        known_um = np.array(
-            [r.unknown_mass for r in gate.recalibrate_batch(X_known_test)] if len(X_known_test) else []
-        )
-        unknown_um = np.array(
-            [r.unknown_mass for r in gate.recalibrate_batch(X_unknown_test)] if len(X_unknown_test) else []
-        )
+        calib_scores = list(_gate_scores(gate, X_calib))
+        known_um = _gate_scores(gate, X_known_test)
+        unknown_um = _gate_scores(gate, X_unknown_test)
 
         for budget in budgets:
             conformal = calibrate_threshold(calib_scores, budget=budget) if calib_scores else None
@@ -626,6 +769,11 @@ class DriftCalibrationSegmentResult:
     adaptive_escalation_rate: float
     static_error: float  # |static_escalation_rate - budget|
     adaptive_error: float  # |adaptive_escalation_rate - budget|
+    # Detect-then-recalibrate baseline (drift_recalibration.py), streamed
+    # over the same scores; NaN when the report is run without it.
+    recalibrated_escalation_rate: float = float("nan")
+    recalibrated_error: float = float("nan")
+    n_recalibrations: int = 0  # cumulative, up to the end of this segment
 
 
 def static_vs_adaptive_conformal_drift_report(
@@ -641,6 +789,10 @@ def static_vs_adaptive_conformal_drift_report(
     window_size: int = 50,
     stage2_n_estimators: int = 300,
     random_state: int = 0,
+    gate_name: str = "softmax",
+    recalib_window_size: int = 500,
+    recalib_check_every: int = 100,
+    recalib_drift_alpha: float = 0.01,
 ) -> List[DriftCalibrationSegmentResult]:
     """Compares a statically-calibrated escalation threshold against an
     online-adaptive one, streamed over known traffic across a real
@@ -663,6 +815,12 @@ def static_vs_adaptive_conformal_drift_report(
     escalation-rate *budget* holds under drift, which is orthogonal to
     the unknown-family recall question `openset_vs_softmax_report`
     answers.
+
+    A third method, detect-then-recalibrate (`drift_recalibration.
+    DetectThenRecalibrate`, the FIRCE-style baseline), is streamed over the
+    same scores: static until a KS drift test on the recent window fires,
+    then recalibrated on that window. `gate_name` picks the gate whose
+    unknown_mass is thresholded (H2 was originally run on "softmax").
     """
     fit_df, remainder = random_holdout(window_a_df, holdout_frac=1.0 - fit_frac, random_state=random_state)
     remainder_sorted = remainder.sort_values(timestamp_col, kind="mergesort").reset_index(drop=True)
@@ -676,23 +834,35 @@ def static_vs_adaptive_conformal_drift_report(
     stage2 = AttackClassifier(Stage2Config(n_estimators=stage2_n_estimators, random_state=random_state)).fit(
         X_fit, y_fit
     )
-    gate = SoftmaxGate(stage2)
+    gate = _fit_gate(gate_name, stage2, X_fit, y_fit, seed=random_state)
 
-    calib_scores = [r.unknown_mass for r in gate.recalibrate_batch(calib_df[feature_cols].to_numpy())]
+    calib_scores = list(_gate_scores(gate, calib_df[feature_cols].to_numpy()))
     static_gate = calibrate_threshold(calib_scores, budget=budget)
     adaptive_gate = AdaptiveConformalGate(budget=budget, gamma=gamma, window_size=window_size).seed(calib_scores)
+    recalibrated_gate = DetectThenRecalibrate(
+        budget,
+        tail="upper",
+        window_size=recalib_window_size,
+        check_every=recalib_check_every,
+        drift_alpha=recalib_drift_alpha,
+    ).seed(calib_scores)
 
     results: List[DriftCalibrationSegmentResult] = []
     for segment_name, segment_df in (("pre_drift", pre_drift_df), ("post_drift", post_drift_df)):
         if len(segment_df) == 0:
             continue
-        scores = [r.unknown_mass for r in gate.recalibrate_batch(segment_df[feature_cols].to_numpy())]
+        scores = _gate_scores(gate, segment_df[feature_cols].to_numpy())
 
         static_escalations = [static_gate.should_escalate(s) for s in scores]
         adaptive_escalations = [adaptive_gate.update(s) for s in scores]
+        recalibrated_escalations = []
+        for s in scores:
+            recalibrated_escalations.append(recalibrated_gate.decide(s))
+            recalibrated_gate.update(s)
 
         static_rate = float(np.mean(static_escalations))
         adaptive_rate = float(np.mean(adaptive_escalations))
+        recalibrated_rate = float(np.mean(recalibrated_escalations))
 
         results.append(
             DriftCalibrationSegmentResult(
@@ -703,6 +873,9 @@ def static_vs_adaptive_conformal_drift_report(
                 adaptive_escalation_rate=adaptive_rate,
                 static_error=abs(static_rate - budget),
                 adaptive_error=abs(adaptive_rate - budget),
+                recalibrated_escalation_rate=recalibrated_rate,
+                recalibrated_error=abs(recalibrated_rate - budget),
+                n_recalibrations=recalibrated_gate.n_recalibrations,
             )
         )
     return results
@@ -777,6 +950,354 @@ def static_vs_adaptive_conformal_significance(report_df: pd.DataFrame, segment: 
         "adaptive_error_std": float(adaptive_errs.std()),
         "note": note,
     }
+
+
+def drift_method_significance(
+    report_df: pd.DataFrame, method_a: str, method_b: str, segment: Optional[str] = None
+) -> Dict[str, object]:
+    """Paired Wilcoxon on `{method}_error` (distance from the budget, smaller
+    is better) for any two of "static", "adaptive", "recalibrated" in a
+    `static_vs_adaptive_conformal_report` table, paired by (seed, segment).
+    Same power caveat as `static_vs_adaptive_conformal_significance`."""
+    df = report_df if segment is None else report_df[report_df["segment"] == segment]
+    a = df[f"{method_a}_error"].to_numpy(dtype=float)
+    b = df[f"{method_b}_error"].to_numpy(dtype=float)
+    keep = ~(np.isnan(a) | np.isnan(b))
+    a, b = a[keep], b[keep]
+    out: Dict[str, object] = {
+        "segment": segment or "pooled",
+        "method_a": method_a,
+        "method_b": method_b,
+        "n_pairs": int(len(a)),
+        "a_error_mean": float(a.mean()) if len(a) else float("nan"),
+        "b_error_mean": float(b.mean()) if len(b) else float("nan"),
+    }
+    if len(a) < 2 or np.all(a == b):
+        out.update(statistic=float("nan"), p_value=float("nan"), note="too few pairs or identical errors")
+    else:
+        statistic, p_value = wilcoxon(a, b)
+        out.update(statistic=float(statistic), p_value=float(p_value), note="")
+    return out
+
+
+# --- Stage 1 recall control under drift: static vs adaptive vs recalibrate -
+#
+# The two-sided budget claim: the escalation gate holds a false-positive-
+# side budget (H2), and Stage 1 should hold a miss-side budget. The static
+# conformal guarantee (conformal_stage1.py) assumes calibration and live
+# attacks are exchangeable; on a chronological stream they are not. This
+# streams real traffic in time order and compares, at the same miss budget:
+#   static        -- conformal threshold calibrated once;
+#   adaptive      -- ACI on confirmed-attack feedback (adaptive_stage1.py);
+#   recalibrated  -- static, recalibrated when a KS drift test fires
+#                    (drift_recalibration.py, FIRCE-style baseline).
+# Feedback for the two online methods arrives `feedback_delay` flows after
+# the attack was scored, modelling triage latency.
+
+
+_STAGE1_METHODS = ("static", "adaptive", "recalibrated")
+
+
+def make_stage1(kind: str, fit_df: pd.DataFrame, feature_cols: List[str], seed: int = 0,
+                label_col: str = "attack_category", contamination="auto", n_estimators: int = 200):
+    """Fit the Stage 1 pre-filter used by an experiment.
+
+    kind="iforest" is the original unsupervised Isolation Forest (kept so older
+    results stay reproducible); kind="hybrid" is `stage1_hybrid.HybridPreFilter`,
+    the current default of the deployed system, which needs labels and so is
+    fitted on the same window with its attack labels.
+    """
+    X = fit_df[feature_cols].to_numpy()
+    if kind == "iforest":
+        return AnomalyPreFilter(Stage1Config(n_estimators=n_estimators, contamination=contamination, random_state=seed)).fit(X)
+    if kind == "hybrid":
+        return HybridPreFilter(HybridConfig(random_state=seed)).fit(X, (fit_df[label_col] != "BENIGN").to_numpy())
+    raise ValueError(f"unknown stage1 kind: {kind!r}")
+
+
+def stage1_stream_trial(
+    df: pd.DataFrame,
+    feature_cols: List[str],
+    miss_budget: float = 0.1,
+    seed: int = 0,
+    fit_frac: float = 0.3,
+    calib_frac: float = 0.15,
+    gamma: float = 0.01,
+    window_size: int = 500,
+    feedback_delay: int = 0,
+    contamination="auto",
+    stage1_n_estimators: int = 200,
+    recalib_window_size: int = 500,
+    recalib_check_every: int = 100,
+    recalib_drift_alpha: float = 0.01,
+    label_col: str = "attack_category",
+    timestamp_col: str = "timestamp",
+    stage1_kind: str = "iforest",
+) -> List[Dict[str, object]]:
+    """One seed, one budget, one feedback delay. The stream is the data in
+    time order: the first `fit_frac` fits Stage 1 (unsupervised, as in
+    training), the attacks in the next `calib_frac` calibrate the static
+    threshold and seed both online methods, and everything after is the
+    evaluation stream.
+
+    Returns one dict per (method, segment). Segments: "overall", one per
+    calendar day of the evaluation stream, and "seen_families" /
+    "new_families" -- attacks of a family that does / does not appear in the
+    calibration set. The static guarantee only covers seen families, so the
+    split shows how much of any overshoot comes from never-calibrated
+    families versus drift within known ones.
+    """
+    ordered = df.sort_values(timestamp_col, kind="mergesort").reset_index(drop=True)
+    n = len(ordered)
+    fit_end = int(n * fit_frac)
+    calib_end = fit_end + int(n * calib_frac)
+    fit_df = ordered.iloc[:fit_end]
+    calib_df = ordered.iloc[fit_end:calib_end]
+    eval_df = ordered.iloc[calib_end:].reset_index(drop=True)
+
+    stage1 = make_stage1(stage1_kind, fit_df, feature_cols, seed=seed, label_col=label_col,
+                         contamination=contamination, n_estimators=stage1_n_estimators)
+
+    calib_attacks = calib_df[calib_df[label_col] != "BENIGN"]
+    if len(calib_attacks) == 0:
+        raise ValueError("calibration window contains no attacks; widen calib_frac")
+    calib_scores = stage1.anomaly_score(calib_attacks[feature_cols].to_numpy())
+    seen_families = set(calib_attacks[label_col])
+
+    static_threshold = calibrate_stage1_threshold(calib_scores, miss_budget).threshold
+    adaptive = AdaptiveStage1Threshold(miss_budget, gamma=gamma, window_size=window_size).seed(calib_scores)
+    recalibrated = DetectThenRecalibrate(
+        miss_budget,
+        tail="lower",
+        window_size=recalib_window_size,
+        check_every=recalib_check_every,
+        drift_alpha=recalib_drift_alpha,
+    ).seed(calib_scores)
+
+    scores = stage1.anomaly_score(eval_df[feature_cols].to_numpy())
+    is_attack = (eval_df[label_col] != "BENIGN").to_numpy()
+    flagged = {m: np.zeros(len(eval_df), dtype=bool) for m in _STAGE1_METHODS}
+    flagged["static"] = scores >= static_threshold
+
+    # Pending feedback: (release_index, score, adaptive threshold at decision).
+    pending: List[tuple] = []
+    head = 0
+    adaptive_threshold = adaptive.threshold
+    for i in range(len(eval_df)):
+        while head < len(pending) and pending[head][0] <= i:
+            _, s, thr = pending[head]
+            adaptive.update(s, thr)
+            recalibrated.update(s)
+            head += 1
+            adaptive_threshold = adaptive.threshold
+        s = scores[i]
+        flagged["adaptive"][i] = s >= adaptive_threshold
+        flagged["recalibrated"][i] = recalibrated.decide(s)
+        if is_attack[i]:
+            pending.append((i + 1 + feedback_delay, s, adaptive_threshold))
+
+    families = eval_df[label_col].to_numpy()
+    days = pd.to_datetime(eval_df[timestamp_col]).dt.date.astype(str).to_numpy()
+    seen_mask = np.array([f in seen_families for f in families])
+    segments = {"overall": np.ones(len(eval_df), dtype=bool)}
+    segments["seen_families"] = ~is_attack | seen_mask
+    segments["new_families"] = ~is_attack | ~seen_mask
+    for day in sorted(set(days)):
+        segments[f"day_{day}"] = days == day
+
+    rows: List[Dict[str, object]] = []
+    for method in _STAGE1_METHODS:
+        for seg_name, seg in segments.items():
+            att = seg & is_attack
+            ben = seg & ~is_attack
+            n_att = int(att.sum())
+            miss_rate = float((~flagged[method][att]).mean()) if n_att else float("nan")
+            rows.append(
+                {
+                    "seed": seed,
+                    "miss_budget": miss_budget,
+                    "feedback_delay": feedback_delay,
+                    "method": method,
+                    "segment": seg_name,
+                    "n_attacks": n_att,
+                    "n_benign": int(ben.sum()),
+                    "miss_rate": miss_rate,
+                    "miss_error": abs(miss_rate - miss_budget) if n_att else float("nan"),
+                    "miss_excess": max(miss_rate - miss_budget, 0.0) if n_att else float("nan"),
+                    "benign_flag_rate": float(flagged[method][ben].mean()) if ben.any() else float("nan"),
+                    "n_calibration_attacks": int(len(calib_scores)),
+                    "n_recalibrations": recalibrated.n_recalibrations if method == "recalibrated" else 0,
+                    "stage1_kind": stage1_kind,
+                }
+            )
+    return rows
+
+
+def stage1_stream_report(
+    df: pd.DataFrame,
+    feature_cols: List[str],
+    miss_budgets: Sequence[float] = (0.05, 0.1, 0.2),
+    seeds: Sequence[int] = (0, 1, 2),
+    feedback_delays: Sequence[int] = (0,),
+    **kwargs,
+) -> pd.DataFrame:
+    """`stage1_stream_trial` over every (budget, seed, delay). `**kwargs`
+    forwards to the trial (fit_frac, gamma, window_size, ...)."""
+    rows: List[Dict[str, object]] = []
+    for budget in miss_budgets:
+        for seed in seeds:
+            for delay in feedback_delays:
+                rows.extend(
+                    stage1_stream_trial(
+                        df, feature_cols, miss_budget=budget, seed=seed, feedback_delay=delay, **kwargs
+                    )
+                )
+    return pd.DataFrame(rows)
+
+
+# --- Cross-dataset transfer -----------------------------------------------
+#
+# Train and calibrate on one dataset (source), deploy on another (target)
+# that shares the canonical CICFlowMeter features. This is the most severe
+# drift available: different networks, hosts and attack tools. It asks
+# whether each budget survives deployment somewhere new, and whether online
+# adaptation recovers it.
+#
+# The adaptive gate is fed EVERY target flow, attacks included, exactly as
+# pipeline.TwoStageDetector feeds it in production (it cannot know which
+# flows are attacks). That is the honest setting, and it has a cost the
+# report exposes: a gate that adapts to a stream containing attacks raises
+# its threshold and escalates fewer of them.
+
+
+def cross_dataset_trial(
+    source_df: pd.DataFrame,
+    target_df: pd.DataFrame,
+    feature_cols: List[str],
+    family_map: Optional[Dict[str, str]] = None,
+    budget: float = 0.1,
+    miss_budget: float = 0.1,
+    seed: int = 0,
+    gate_names: Sequence[str] = ALL_GATE_NAMES,
+    stage2_n_estimators: int = 300,
+    gamma: float = 0.05,
+    window_size: int = 50,
+    stage1_gamma: float = 0.01,
+    stage1_window_size: int = 500,
+    label_col: str = "attack_category",
+    timestamp_col: str = "timestamp",
+    stage1_kind: str = "iforest",
+) -> List[Dict[str, object]]:
+    """One seed of source -> target transfer. `family_map` maps target
+    attack names onto source families they correspond to (e.g.
+    {"ddos": "DoS/DDoS"}); mapped target attacks are "shared", the rest are
+    "novel" -- genuinely unseen families. Returns one row per gate (plus a
+    "stage1" row) with escalation and miss metrics under the static,
+    adaptive and recalibrated thresholds.
+    """
+    family_map = family_map or {}
+    fit_df, calib_df = random_holdout(source_df, holdout_frac=0.25, random_state=seed)
+    X_fit = fit_df[feature_cols].to_numpy()
+    y_fit = fit_df[label_col].tolist()
+    stage2 = AttackClassifier(Stage2Config(n_estimators=stage2_n_estimators, random_state=seed)).fit(X_fit, y_fit)
+
+    target = (
+        target_df.sort_values(timestamp_col, kind="mergesort").reset_index(drop=True)
+        if timestamp_col in target_df.columns
+        else target_df.reset_index(drop=True)
+    )
+    X_target = target[feature_cols].to_numpy()
+    t_labels = target[label_col].to_numpy()
+    is_benign = t_labels == "BENIGN"
+    mapped = np.array([family_map.get(l) for l in t_labels], dtype=object)
+    is_shared = ~is_benign & np.array([m is not None for m in mapped])
+    is_novel = ~is_benign & ~is_shared
+
+    rows: List[Dict[str, object]] = []
+    for gate_name in gate_names:
+        gate = _fit_gate(gate_name, stage2, X_fit, y_fit, seed=seed)
+        calib_scores = list(_gate_scores(gate, calib_df[feature_cols].to_numpy()))
+        if gate_name == "openset":
+            results = gate.recalibrate_batch(X_target)
+            scores = np.array([r.unknown_mass for r in results])
+            predicted = np.array([r.predicted_class for r in results])
+            del results
+        else:
+            scores = _gate_scores(gate, X_target)
+            predicted = np.asarray(stage2.predict(X_target))
+
+        static = calibrate_threshold(calib_scores, budget=budget)
+        adaptive = AdaptiveConformalGate(budget=budget, gamma=gamma, window_size=window_size).seed(calib_scores)
+        recalibrated = DetectThenRecalibrate(budget, tail="upper").seed(calib_scores)
+        escalated = {"static": scores > static.threshold, "adaptive": np.zeros(len(scores), bool), "recalibrated": np.zeros(len(scores), bool)}
+        for i, s in enumerate(scores):
+            escalated["adaptive"][i] = adaptive.update(s)
+            escalated["recalibrated"][i] = recalibrated.decide(s)
+            recalibrated.update(s)
+
+        row: Dict[str, object] = {
+            "seed": seed,
+            "gate_name": gate_name,
+            "n_target_benign": int(is_benign.sum()),
+            "n_target_shared": int(is_shared.sum()),
+            "n_target_novel": int(is_novel.sum()),
+            "shared_family_accuracy": float((predicted[is_shared] == mapped[is_shared]).mean()) if is_shared.any() else float("nan"),
+            "novel_auroc": float(roc_auc_score(np.r_[np.zeros(is_benign.sum()), np.ones(is_novel.sum())], np.r_[scores[is_benign], scores[is_novel]]))
+            if is_benign.any() and is_novel.any()
+            else float("nan"),
+            "n_recalibrations": recalibrated.n_recalibrations,
+        }
+        for method, esc in escalated.items():
+            rate = float(esc[is_benign].mean()) if is_benign.any() else float("nan")
+            row[f"{method}_benign_escalation_rate"] = rate
+            row[f"{method}_budget_error"] = abs(rate - budget) if is_benign.any() else float("nan")
+            row[f"{method}_novel_recall"] = float(esc[is_novel].mean()) if is_novel.any() else float("nan")
+        rows.append(row)
+
+    # Stage 1: IsolationForest fit on source, miss budget calibrated on source
+    # attacks; target attacks fed back to the adaptive threshold in order.
+    stage1 = make_stage1(stage1_kind, fit_df, feature_cols, seed=seed, label_col=label_col)
+    src_attack_scores = stage1.anomaly_score(calib_df[calib_df[label_col] != "BENIGN"][feature_cols].to_numpy())
+    t_scores = stage1.anomaly_score(X_target)
+    static_thr = calibrate_stage1_threshold(src_attack_scores, miss_budget).threshold
+    adaptive1 = AdaptiveStage1Threshold(miss_budget, gamma=stage1_gamma, window_size=stage1_window_size).seed(src_attack_scores)
+    flagged_adaptive = np.zeros(len(t_scores), bool)
+    thr = adaptive1.threshold
+    for i, s in enumerate(t_scores):
+        flagged_adaptive[i] = s >= thr
+        if not is_benign[i]:
+            adaptive1.update(s, thr)
+            thr = adaptive1.threshold
+    attacks = ~is_benign
+    rows.append(
+        {
+            "seed": seed,
+            "gate_name": "stage1",
+            "n_target_benign": int(is_benign.sum()),
+            "n_target_shared": int(is_shared.sum()),
+            "n_target_novel": int(is_novel.sum()),
+            "static_miss_rate": float((t_scores[attacks] < static_thr).mean()) if attacks.any() else float("nan"),
+            "adaptive_miss_rate": float((~flagged_adaptive[attacks]).mean()) if attacks.any() else float("nan"),
+            "static_benign_flag_rate": float((t_scores[is_benign] >= static_thr).mean()) if is_benign.any() else float("nan"),
+            "adaptive_benign_flag_rate": float(flagged_adaptive[is_benign].mean()) if is_benign.any() else float("nan"),
+            "miss_budget": miss_budget,
+        }
+    )
+    return rows
+
+
+def cross_dataset_report(
+    source_df: pd.DataFrame,
+    target_df: pd.DataFrame,
+    feature_cols: List[str],
+    seeds: Sequence[int] = (0, 1, 2),
+    **kwargs,
+) -> pd.DataFrame:
+    """`cross_dataset_trial` over seeds; `**kwargs` forwards to the trial."""
+    rows: List[Dict[str, object]] = []
+    for seed in seeds:
+        rows.extend(cross_dataset_trial(source_df, target_df, feature_cols, seed=seed, **kwargs))
+    return pd.DataFrame(rows)
 
 
 # --- Auditing AdaptiveConformalGate's production ground-truth-proxy -------

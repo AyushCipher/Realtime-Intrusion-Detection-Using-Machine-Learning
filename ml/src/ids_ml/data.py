@@ -294,3 +294,53 @@ def map_to_canonical(df: pd.DataFrame, dayfirst: bool = False) -> pd.DataFrame:
 
 def load_and_map(paths: Union[str, Path, Iterable[Union[str, Path]]]) -> pd.DataFrame:
     return map_to_canonical(load_cicids_csv(paths))
+
+
+# --- Other datasets re-extracted with CICFlowMeter -------------------------
+#
+# The University of Queensland releases UNSW-NB15, ToN-IoT and BoT-IoT
+# re-extracted with CICFlowMeter ("CIC-UNSW-NB15", "CIC-ToN-IoT", ... at
+# https://staff.itee.uq.edu.au/marius/NIDS_datasets/; download needs a UQ
+# RDM login or access request). Because they share CICFlowMeter's features,
+# they map onto CANONICAL_FEATURE_COLUMNS and allow cross-dataset tests with
+# CSE-CIC-IDS2018 without a second model.
+#
+# NOT VERIFIED against the actual files: they could not be downloaded in the
+# environment this was written in. The loader therefore accepts either
+# CICFlowMeter naming (CICIDS2017-style "Total Fwd Packets" or
+# CICFlowMeter-V3-style "Tot Fwd Pkts"), takes the attack name from an
+# "Attack" column when present (UQ's releases carry a binary "Label" plus a
+# string "Attack"), and fails loudly, listing what is missing, rather than
+# guessing. Check the first load's output before trusting results.
+
+_GENERIC_LABEL_CANDIDATES = ("Attack", "attack_cat", "Label", "label")
+_BENIGN_ALIASES = {"benign", "normal", "0"}
+
+
+def load_and_map_cicflowmeter(
+    paths: Union[str, Path, Iterable[Union[str, Path]]],
+    label_column: Union[str, None] = None,
+    dayfirst: bool = False,
+) -> pd.DataFrame:
+    """Load CICFlowMeter-format CSVs from any dataset onto the canonical
+    feature space. Raw attack names are kept as-is as the family
+    (`attack_category`), because other datasets' attack vocabularies do not
+    map one-to-one onto CICIDS's families; cross-dataset code decides which
+    names correspond. Benign aliases ("Benign", "normal", "0") become
+    "BENIGN".
+    """
+    df = load_cicids_csv(paths)
+    df = df.rename(columns=CICIDS2018_TO_2017_RENAME)
+    if label_column is None:
+        label_column = next((c for c in _GENERIC_LABEL_CANDIDATES if c in df.columns), None)
+        if label_column is None:
+            raise ValueError(f"no label column found; tried {_GENERIC_LABEL_CANDIDATES}, columns are {list(df.columns)}")
+    raw = df[label_column].astype(str).str.strip()
+    df[LABEL_COLUMN] = raw.where(~raw.str.lower().isin(_BENIGN_ALIASES), "BENIGN")
+    out = map_to_canonical(df, dayfirst=dayfirst)
+    # map_to_canonical folds unrecognised labels into "Other"; for a foreign
+    # dataset the raw attack name is the meaningful family.
+    out["attack_category"] = out["label"]
+    if "timestamp" not in out.columns:
+        logger.warning("no Timestamp column: chronological splits and drift experiments will not run on this data")
+    return out

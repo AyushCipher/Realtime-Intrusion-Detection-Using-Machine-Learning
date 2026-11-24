@@ -28,6 +28,8 @@ import logging
 import sys
 from pathlib import Path
 
+import pandas as pd
+
 from .adaptive_conformal_gate import AdaptiveConformalGate
 from .conformal_gate import calibrate_threshold
 from .data import load_and_map
@@ -35,8 +37,11 @@ from .evaluation import adversarial_robustness_report, leakage_comparison_report
 from .features import CANONICAL_FEATURE_COLUMNS
 from .openset_head import OpenMaxConfig, OpenMaxHead
 from .pipeline import TwoStageDetector
+from .ood_gates import KNNGate
 from .softmax_gate import SoftmaxGate
 from .split import time_based_split
+from .conformal_stage1 import calibrate_stage1_threshold
+from .stage1_hybrid import HybridConfig, HybridPreFilter
 from .stage1_iforest import AnomalyPreFilter, Stage1Config
 from .stage2_xgboost import AttackClassifier, Stage2Config
 
@@ -44,9 +49,24 @@ logger = logging.getLogger("ids_ml.train")
 
 GATE_TYPE_FILENAME = "gate_type.txt"
 OPENSET_GATE_FILENAME = "openset_gate.joblib"
+KNN_GATE_FILENAME = "knn_gate.joblib"
 ESCALATION_GATE_FILENAME = "escalation_gate.joblib"
 ESCALATION_KIND_FILENAME = "escalation_kind.txt"  # "static" | "adaptive"; absent means "static" (pre-dates this file)
 
+
+
+def _load_training_data(paths) -> pd.DataFrame:
+    """Raw CICIDS2017/2018 CSVs go through `load_and_map`; CSVs already in canonical
+    form (the output of build_cicids2018_subsample.py, lycos_prepare.py or
+    dataset_audit.py --write-dedup) are read as they are, so the deployed model can
+    be trained on the cleaned real data the experiments use."""
+    header = pd.read_csv(paths[0], nrows=0).columns
+    if set(CANONICAL_FEATURE_COLUMNS + ["attack_category", "timestamp"]) <= set(header):
+        df = pd.concat([pd.read_csv(p, parse_dates=["timestamp"]) for p in paths], ignore_index=True)
+        if "is_attack" not in df.columns:
+            df["is_attack"] = df["attack_category"] != "BENIGN"
+        return df.sort_values("timestamp").reset_index(drop=True)
+    return load_and_map(paths)
 
 def parse_args(argv=None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Train the ids_ml two-stage detector")
@@ -57,13 +77,31 @@ def parse_args(argv=None) -> argparse.Namespace:
     parser.add_argument("--stage1-n-estimators", type=int, default=200)
     parser.add_argument("--stage1-contamination", default="auto")
     parser.add_argument("--stage2-n-estimators", type=int, default=300)
+    parser.add_argument("--stage1-supervised-weight", type=float, default=0.5, help="hybrid with --stage1-fusion weighted only: 1.0 supervised-only ... 0.0 density-only")
+    parser.add_argument("--stage1-fusion", choices=["max", "weighted"], default="max", help="hybrid only: how supervised and density scores combine")
+    parser.add_argument(
+        "--stage1-kind",
+        choices=["iforest", "hybrid"],
+        default="iforest",
+        help="iforest: unsupervised Isolation Forest (default, unchanged). hybrid: supervised + benign-density "
+        "pre-filter, which works on real traffic where the Isolation Forest does not (see stage1_hybrid.py)",
+    )
+    parser.add_argument(
+        "--stage1-miss-budget",
+        type=float,
+        default=None,
+        help="If set, calibrate Stage 1's flag threshold on validation attack flows so a known attack is "
+        "passed as benign with probability <= this budget (see conformal_stage1.py)",
+    )
     parser.add_argument("--skip-leakage-check", action="store_true")
     parser.add_argument("--skip-robustness-probe", action="store_true")
     parser.add_argument(
         "--gate",
-        choices=["none", "softmax", "openset"],
+        choices=["none", "softmax", "openset", "knn"],
         default="none",
-        help="Fit an open-set escalation gate and save it alongside the models (default: none, closed-set only)",
+        help="Fit an open-set escalation gate and save it alongside the models (default: none, closed-set only). "
+        "knn (distance to the k-th nearest training flow) escalated about twice as many unseen-family flows as "
+        "openset at the same cost on real data -- see docs/real_data_findings.md section 4",
     )
     parser.add_argument("--escalation-budget", type=float, default=0.1, help="Target escalation rate for --gate calibration")
     parser.add_argument(
@@ -85,13 +123,13 @@ def parse_args(argv=None) -> argparse.Namespace:
 def main(argv=None) -> int:
     args = parse_args(argv)
     if args.adaptive_escalation and args.gate == "none":
-        raise ValueError("--adaptive-escalation requires --gate softmax or --gate openset")
+        raise ValueError("--adaptive-escalation requires --gate softmax, openset or knn")
     logging.basicConfig(
         level=logging.DEBUG if args.verbose else logging.INFO,
         format="%(asctime)s %(levelname)s %(name)s: %(message)s",
     )
 
-    df = load_and_map(args.data)
+    df = _load_training_data(args.data)
     logger.info("Loaded %d rows from %d file(s)", len(df), len(args.data))
 
     train, val, test = time_based_split(df, train_frac=args.train_frac, val_frac=args.val_frac)
@@ -101,7 +139,25 @@ def main(argv=None) -> int:
 
     contamination = args.stage1_contamination if args.stage1_contamination == "auto" else float(args.stage1_contamination)
     stage1_cfg = Stage1Config(n_estimators=args.stage1_n_estimators, contamination=contamination)
-    stage1 = AnomalyPreFilter(stage1_cfg).fit(X_train)
+    if args.stage1_kind == "hybrid":
+        stage1 = HybridPreFilter(HybridConfig(fusion=args.stage1_fusion, supervised_weight=args.stage1_supervised_weight)).fit(X_train, train["is_attack"].to_numpy())
+    else:
+        stage1 = AnomalyPreFilter(stage1_cfg).fit(X_train)
+
+    if args.stage1_miss_budget is not None:
+        val_attacks = val[val["is_attack"]][CANONICAL_FEATURE_COLUMNS].to_numpy()
+        if len(val_attacks) == 0:
+            raise ValueError("--stage1-miss-budget needs attack flows in the validation split")
+        recall_guarantee = calibrate_stage1_threshold(stage1.anomaly_score(val_attacks), args.stage1_miss_budget)
+        recall_guarantee.apply(stage1)
+        logger.info(
+            "Stage 1 recall control: flag threshold=%.4f from %d validation attack flows, "
+            "known-attack miss rate <= %.4f (budget %.4f, exchangeability assumed)",
+            recall_guarantee.threshold,
+            recall_guarantee.n_calibration,
+            recall_guarantee.guaranteed_miss_rate,
+            recall_guarantee.miss_budget,
+        )
 
     stage2_cfg = Stage2Config(n_estimators=args.stage2_n_estimators)
     stage2 = AttackClassifier(stage2_cfg).fit(X_train, train["attack_category"].tolist())
@@ -162,10 +218,17 @@ def main(argv=None) -> int:
         if args.gate == "openset":
             gate = OpenMaxHead(stage2, OpenMaxConfig()).fit(X_train, train["attack_category"].tolist())
             gate.save(model_dir / OPENSET_GATE_FILENAME)
+        elif args.gate == "knn":
+            gate = KNNGate(stage2).fit(X_train, train["attack_category"].tolist())
+            gate.save(model_dir / KNN_GATE_FILENAME)
         else:
             gate = SoftmaxGate(stage2)  # no fitted state of its own; reconstructed fresh in serve.py
 
-        calib_scores = [r.unknown_mass for r in gate.recalibrate_batch(X_val)]
+        # A deployed gate only ever sees flows Stage 1 flagged (pipeline.TwoStageDetector), so the
+        # escalation budget is calibrated on those; fall back to every validation flow if none are.
+        val_flagged = stage1.flag(X_val)
+        X_calib = X_val[val_flagged] if val_flagged.any() else X_val
+        calib_scores = [r.unknown_mass for r in gate.recalibrate_batch(X_calib)]
 
         if args.adaptive_escalation:
             escalation_gate = AdaptiveConformalGate(
