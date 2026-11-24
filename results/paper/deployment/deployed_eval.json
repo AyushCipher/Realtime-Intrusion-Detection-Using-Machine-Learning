@@ -1,0 +1,101 @@
+{
+  "model_dir": "/app/site_models",
+  "split": "random",
+  "n_test": 52987,
+  "n_attacks": 25922,
+  "attack_detection_rate": 0.9502,
+  "attack_miss_rate": 0.0498,
+  "benign_alert_rate": 0.0431,
+  "benign_escalation_rate": 0.0244,
+  "per_family": {
+    "Analysis": {
+      "n": 60,
+      "detected": 1.0,
+      "escalated": 0.05
+    },
+    "Backdoor": {
+      "n": 79,
+      "detected": 0.9873,
+      "escalated": 0.4557
+    },
+    "Botnet": {
+      "n": 1547,
+      "detected": 1.0,
+      "escalated": 0.0168
+    },
+    "Brute Force": {
+      "n": 1783,
+      "detected": 0.9989,
+      "escalated": 0.0006
+    },
+    "DoS": {
+      "n": 637,
+      "detected": 0.9922,
+      "escalated": 0.1727
+    },
+    "DoS/DDoS": {
+      "n": 12480,
+      "detected": 0.9994,
+      "escalated": 0.0199
+    },
+    "Exploits": {
+      "n": 2308,
+      "detected": 0.9948,
+      "escalated": 0.104
+    },
+    "Fuzzers": {
+      "n": 2267,
+      "detected": 0.9951,
+      "escalated": 0.0591
+    },
+    "Generic": {
+      "n": 633,
+      "detected": 0.9984,
+      "escalated": 0.2243
+    },
+    "Infiltration": {
+      "n": 1863,
+      "detected": 0.3376,
+      "escalated": 0.11
+    },
+    "PortScan": {
+      "n": 31,
+      "detected": 0.9355,
+      "escalated": 0.129
+    },
+    "Reconnaissance": {
+      "n": 1800,
+      "detected": 0.9961,
+      "escalated": 0.0139
+    },
+    "Shellcode": {
+      "n": 236,
+      "detected": 1.0,
+      "escalated": 0.0127
+    },
+    "Web Attack": {
+      "n": 164,
+      "detected": 0.9451,
+      "escalated": 0.2012
+    },
+    "Worms": {
+      "n": 34,
+      "detected": 1.0,
+      "escalated": 0.0
+    }
+  },
+  "per_dataset": {
+    "cse": {
+      "miss": 0.0987,
+      "benign_alert": 0.0527
+    },
+    "lycos": {
+      "miss": 0.001,
+      "benign_alert": 0.0385
+    },
+    "unsw": {
+      "miss": 0.0046,
+      "benign_alert": 0.0382
+    }
+  }
+}

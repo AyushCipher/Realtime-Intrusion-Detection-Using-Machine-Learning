@@ -537,3 +537,87 @@ Reading:
   holds misses at 2-3% but alerts on 88-93% of benign flows. On UNSW-NB15 every method
   lands slightly over budget (5.3-5.5% at 5%). This is the case the adaptive methods of
   section 10 address.
+
+## 14. A fused gate for both kinds of unknown: tested, not deployed
+
+Sections 4 and 8 show the best escalation gate depends on what "unknown" means: kNN for
+entirely new families, softmax/OpenMax for variants of known families.
+`ood_gates.FusedGate` takes the larger of two percentiles (kNN distance and softmax
+uncertainty, each ranked against held-out known flows), the same max fusion the hybrid
+Stage 1 uses. It is still one score, so the conformal escalation budget is unchanged.
+
+`ml/scripts/eval_fused_gate.py` on cleaned CSE-CIC-IDS2018 (`results/paper/fused_gate/`):
+leave-one-family-out (5 families x 3 seeds) and leave-one-attack-type-out (9 types x 2
+seeds). Rule fixed before running: deploy fused only if its AUROC is within 0.02 of the
+best gate in BOTH protocols.
+
+| Gate | AUROC new families | AUROC variants | Recall at matched 10% (new / variants) |
+|---|---|---|---|
+| kNN | **0.769** | 0.713 | **0.62** / 0.53 |
+| fused | 0.744 | 0.814 | 0.45 / **0.58** |
+| softmax | 0.629 | **0.861** | 0.19 / 0.58 |
+| OpenMax | 0.639 | 0.855 | 0.19 / 0.56 |
+
+Fused is a compromise: it has the best worst-case AUROC (0.744) but loses a third of
+kNN's recall on new families, and it fails the rule in both protocols. No fused-vs-kNN
+difference is significant (clustered p = 0.44-1.0). The deployed system therefore uses
+kNN, the gate for genuinely new families; `ML_GATE=fused` remains an option.
+
+## 15. The deployed system, trained on real data and run live with a real LLM
+
+`docker-compose.realdata.yml` trains the deployment configuration inside the ml container
+on `site_train_combined.csv`: 353,238 cleaned flows from CSE-CIC-IDS2018, UNSW-NB15 and
+LYCOS-IDS2017 (60,000 benign per dataset, at most 15,000 per attack label; 15 attack
+families), random split 70/15/15. Configuration: hybrid Stage 1, XGBoost Stage 2, kNN
+gate, adaptive escalation threshold (10% budget), and joint cascade calibration at a 5%
+end-to-end miss budget (`train.py --joint-miss-budget`, section 13). Training took 16
+minutes in the container.
+
+Joint calibration on its own calibration half: end-to-end miss 4.75%, benign alerts 4.4%.
+`ml/scripts/eval_deployed_model.py` scores the held-out test split with the deployed
+thresholds (`results/paper/deployment/deployed_eval.json`; 52,987 flows, 25,922 attacks):
+
+| Measure | Result |
+|---|---|
+| Attacks raising an alert | **95.0%** (miss 4.98%, the 5% budget) |
+| Benign flows raising an alert | 4.3% |
+| Benign flows escalated to an analyst | 2.4% |
+| Families detected at >= 99% | 12 of 15 (Analysis, Backdoor, Botnet, Brute Force, DoS, DoS/DDoS, Exploits, Fuzzers, Generic, Reconnaissance, Shellcode, Worms) |
+| Web Attack / PortScan | 94.5% / 93.5% (n = 164 / 31) |
+| Infiltration | **33.8%** (its flows are largely identical to benign ones, section 2a) |
+| Miss rate by dataset | UNSW-NB15 0.5%, LYCOS-IDS2017 0.1%, CSE-CIC-IDS2018 9.9% (Infiltration) |
+
+These are KNOWN families (present in training). For families never seen in training the
+evidence is section 4: through the full cascade the kNN gate escalated 0.64 of
+withheld-family flows, the best of six gates.
+
+Live run (`integration/test_tier2_live.py`, `results/paper/deployment/tier2_live_run.log`):
+the stack replayed the demo pcap; ml escalated alerts, tier2-reasoner explained them with
+Llama 3.2 1B through Ollama on the host, and the explanations reached the dashboard API.
+Passed: 5 real-LLM explanations, latency median 4.2 s, max 31.6 s. Behaviour-keyed
+retrieval was live (T1110, T1046 and T1210 retrieved for BENIGN-predicted escalated
+flows). Two findings: (1) the 1B model named no technique in its structured answer, only
+in free text ("may be Brute Force"); (2) every replayed demo flow was escalated (6 of 6):
+the demo pcap's synthetic traffic is unlike the real training traffic, so to this model
+it is all unfamiliar. On a real network the escalation threshold must be calibrated on
+that network's own benign traffic (the adaptive threshold does this over time).
+
+## 16. Is Tier 2 useful? Verdict from the measurements
+
+* As DETECTION: no. Tier 2 sees only escalated alerts and never changes a detection
+  decision; it should stay off the detection path, as built.
+* As ANALYST ASSIST, with behaviour-keyed retrieval: yes, modestly. On 100 real escalated
+  alerts from unseen families, Gemini 3.1 Flash-Lite named the correct ATT&CK technique
+  in 34/97 (35%) with behaviour-keyed retrieval, against 0/100 with class-keyed retrieval
+  and 12/100 with none (McNemar p = 1.2e-10 and 1.0e-5). It still fails on Brute Force
+  and Infiltration (0/20 each).
+* The retrieval step alone is the most reliable part: with no LLM at all it puts the
+  correct technique among its 2-3 suggestions for 332/500 real alerts (66%), instantly,
+  deterministically and for free. Showing those suggestions to the analyst is worth more
+  than a small LLM's sentence.
+* Class-keyed retrieval is actively harmful for escalated alerts (0/100) and should not
+  be used for them; `--retrieval-mode auto` is now the service default.
+* Cost and reliability: hosted free tiers returned 503s, hit daily quotas after a few
+  hundred calls, and took 1.5-20 s per call; a 1B local model is reliable and free but
+  weak. For real use, a stronger model (a paid hosted model, or a 7-8B local model on a
+  GPU) is needed, and explanations should be labelled as suggestions.

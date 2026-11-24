@@ -1,0 +1,215 @@
+{
+  "family": {
+    "held_out": [
+      "Botnet",
+      "Brute Force",
+      "DoS/DDoS",
+      "Infiltration",
+      "Web Attack"
+    ],
+    "means": {
+      "unknown_auroc": {
+        "fused": 0.7441,
+        "knn": 0.7693,
+        "openset": 0.6394,
+        "softmax": 0.6291
+      },
+      "recall_at_matched_fpr": {
+        "fused": 0.4482,
+        "knn": 0.6201,
+        "openset": 0.1917,
+        "softmax": 0.1897
+      }
+    },
+    "fused_vs": [
+      {
+        "metric": "unknown_auroc",
+        "gate_a": "fused",
+        "gate_b": "softmax",
+        "n_clusters": 5,
+        "a_mean": 0.7440948793715834,
+        "b_mean": 0.6291406672643165,
+        "a_wins": 4,
+        "b_wins": 1,
+        "statistic": 1.0,
+        "p_value": 0.125,
+        "note": ""
+      },
+      {
+        "metric": "recall_at_matched_fpr",
+        "gate_a": "fused",
+        "gate_b": "softmax",
+        "n_clusters": 5,
+        "a_mean": 0.4482215199614202,
+        "b_mean": 0.18965597814570942,
+        "a_wins": 4,
+        "b_wins": 1,
+        "statistic": 3.0,
+        "p_value": 0.3125,
+        "note": ""
+      },
+      {
+        "metric": "unknown_auroc",
+        "gate_a": "fused",
+        "gate_b": "openset",
+        "n_clusters": 5,
+        "a_mean": 0.7440948793715834,
+        "b_mean": 0.6393552326890182,
+        "a_wins": 4,
+        "b_wins": 1,
+        "statistic": 1.0,
+        "p_value": 0.125,
+        "note": ""
+      },
+      {
+        "metric": "recall_at_matched_fpr",
+        "gate_a": "fused",
+        "gate_b": "openset",
+        "n_clusters": 5,
+        "a_mean": 0.4482215199614202,
+        "b_mean": 0.1916807981575768,
+        "a_wins": 4,
+        "b_wins": 1,
+        "statistic": 1.0,
+        "p_value": 0.125,
+        "note": ""
+      },
+      {
+        "metric": "unknown_auroc",
+        "gate_a": "fused",
+        "gate_b": "knn",
+        "n_clusters": 5,
+        "a_mean": 0.7440948793715834,
+        "b_mean": 0.7693199858139539,
+        "a_wins": 1,
+        "b_wins": 4,
+        "statistic": 4.0,
+        "p_value": 0.4375,
+        "note": ""
+      },
+      {
+        "metric": "recall_at_matched_fpr",
+        "gate_a": "fused",
+        "gate_b": "knn",
+        "n_clusters": 5,
+        "a_mean": 0.4482215199614202,
+        "b_mean": 0.6201362050766736,
+        "a_wins": 3,
+        "b_wins": 2,
+        "statistic": 7.0,
+        "p_value": 1.0,
+        "note": ""
+      }
+    ],
+    "fused_within_0.02_of_best_auroc": false
+  },
+  "type": {
+    "held_out": [
+      "Bot",
+      "Brute Force -Web",
+      "DDOS attack-HOIC",
+      "DDOS attack-LOIC-UDP",
+      "DoS attacks-GoldenEye",
+      "DoS attacks-Hulk",
+      "DoS attacks-Slowloris",
+      "Infilteration",
+      "SSH-Bruteforce"
+    ],
+    "means": {
+      "unknown_auroc": {
+        "fused": 0.8138,
+        "knn": 0.7126,
+        "openset": 0.8551,
+        "softmax": 0.8608
+      },
+      "recall_at_matched_fpr": {
+        "fused": 0.583,
+        "knn": 0.5265,
+        "openset": 0.5596,
+        "softmax": 0.5781
+      }
+    },
+    "fused_vs": [
+      {
+        "metric": "unknown_auroc",
+        "gate_a": "fused",
+        "gate_b": "softmax",
+        "n_clusters": 9,
+        "a_mean": 0.8137509776071601,
+        "b_mean": 0.8607549891843018,
+        "a_wins": 4,
+        "b_wins": 5,
+        "statistic": 13.0,
+        "p_value": 0.30078125,
+        "note": ""
+      },
+      {
+        "metric": "recall_at_matched_fpr",
+        "gate_a": "fused",
+        "gate_b": "softmax",
+        "n_clusters": 9,
+        "a_mean": 0.5829573839800207,
+        "b_mean": 0.5780620169292457,
+        "a_wins": 4,
+        "b_wins": 5,
+        "statistic": 22.0,
+        "p_value": 1.0,
+        "note": ""
+      },
+      {
+        "metric": "unknown_auroc",
+        "gate_a": "fused",
+        "gate_b": "openset",
+        "n_clusters": 9,
+        "a_mean": 0.8137509776071601,
+        "b_mean": 0.8551405243219885,
+        "a_wins": 4,
+        "b_wins": 5,
+        "statistic": 16.0,
+        "p_value": 0.49609375,
+        "note": ""
+      },
+      {
+        "metric": "recall_at_matched_fpr",
+        "gate_a": "fused",
+        "gate_b": "openset",
+        "n_clusters": 9,
+        "a_mean": 0.5829573839800207,
+        "b_mean": 0.5596393260373459,
+        "a_wins": 4,
+        "b_wins": 5,
+        "statistic": 21.0,
+        "p_value": 0.91015625,
+        "note": ""
+      },
+      {
+        "metric": "unknown_auroc",
+        "gate_a": "fused",
+        "gate_b": "knn",
+        "n_clusters": 9,
+        "a_mean": 0.8137509776071601,
+        "b_mean": 0.7125545949128713,
+        "a_wins": 4,
+        "b_wins": 5,
+        "statistic": 22.0,
+        "p_value": 1.0,
+        "note": ""
+      },
+      {
+        "metric": "recall_at_matched_fpr",
+        "gate_a": "fused",
+        "gate_b": "knn",
+        "n_clusters": 9,
+        "a_mean": 0.5829573839800207,
+        "b_mean": 0.5264501232144093,
+        "a_wins": 4,
+        "b_wins": 4,
+        "statistic": 17.0,
+        "p_value": 0.9453125,
+        "note": ""
+      }
+    ],
+    "fused_within_0.02_of_best_auroc": false
+  },
+  "deploy_fused": false
+}

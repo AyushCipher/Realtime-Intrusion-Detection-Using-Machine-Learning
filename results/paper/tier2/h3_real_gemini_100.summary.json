@@ -1,0 +1,78 @@
+{
+  "model": "gemini-3.1-flash-lite",
+  "n_alerts": 100,
+  "conditions": {
+    "rag": {
+      "completed": 100,
+      "failed": 0,
+      "correct": 0,
+      "accuracy": 0.0,
+      "wilson95": [
+        0.0,
+        0.037
+      ]
+    },
+    "no_rag_free": {
+      "completed": 100,
+      "failed": 0,
+      "correct": 12,
+      "accuracy": 0.12,
+      "wilson95": [
+        0.07,
+        0.198
+      ]
+    },
+    "rag_behaviour": {
+      "completed": 97,
+      "failed": 3,
+      "correct": 34,
+      "accuracy": 0.351,
+      "wilson95": [
+        0.263,
+        0.45
+      ]
+    }
+  },
+  "per_family": {
+    "Botnet": {
+      "rag": "0/20",
+      "no_rag_free": "0/20",
+      "rag_behaviour": "8/19"
+    },
+    "Brute Force": {
+      "rag": "0/20",
+      "no_rag_free": "0/20",
+      "rag_behaviour": "0/20"
+    },
+    "DoS/DDoS": {
+      "rag": "0/20",
+      "no_rag_free": "1/20",
+      "rag_behaviour": "13/18"
+    },
+    "Infiltration": {
+      "rag": "0/20",
+      "no_rag_free": "0/20",
+      "rag_behaviour": "0/20"
+    },
+    "Web Attack": {
+      "rag": "0/20",
+      "no_rag_free": "11/20",
+      "rag_behaviour": "13/20"
+    }
+  },
+  "mcnemar_rag_vs_no_rag_free": {
+    "b_rag_only": 0,
+    "c_no_rag_free_only": 12,
+    "p": 0.00048828125
+  },
+  "mcnemar_rag_behaviour_vs_no_rag_free": {
+    "b_rag_behaviour_only": 24,
+    "c_no_rag_free_only": 2,
+    "p": 1.049041748046875e-05
+  },
+  "mcnemar_rag_behaviour_vs_rag": {
+    "b_rag_behaviour_only": 34,
+    "c_rag_only": 0,
+    "p": 1.1641532182693481e-10
+  }
+}
