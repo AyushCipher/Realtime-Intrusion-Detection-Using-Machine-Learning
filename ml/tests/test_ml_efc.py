@@ -9,7 +9,10 @@ def _data(seed=0, n=1500, d=6):
     i.e. a combination A never shows. EFC scores combinations through its couplings."""
     rng = np.random.default_rng(seed)
     cov = np.full((d, d), 0.9) + 0.1 * np.eye(d)
-    a = rng.multivariate_normal(np.zeros(d), cov, n)
+    # method="cholesky": the default SVD factorisation's singular-vector signs
+    # depend on the LAPACK/BLAS build, so the same seed drew different samples on
+    # different CI machines (AUROC 0.972 locally, 0.888 on one runner).
+    a = rng.multivariate_normal(np.zeros(d), cov, n, method="cholesky")
     signs = np.where(np.arange(d) % 2 == 0, 1.0, -1.0)
     b = rng.normal(0, 0.3, (n, d)) + 1.5 * signs
     return a, b
