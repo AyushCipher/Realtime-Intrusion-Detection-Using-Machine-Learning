@@ -1,0 +1,54 @@
+{
+  "label": "constrained-container proxy (not edge hardware)",
+  "cgroup_limits": {
+    "cpu.max": "100000 100000",
+    "memory.max": "1073741824"
+  },
+  "os_cpu_count": 16,
+  "platform": "Linux-6.18.33.2-microsoft-standard-WSL2-x86_64-with-glibc2.41",
+  "machine": "x86_64",
+  "model_load_seconds": 0.311,
+  "model_bytes_on_disk": {
+    "escalation_gate.joblib": 74,
+    "knn_gate.joblib": 5601822,
+    "stage1.joblib": 5969371,
+    "stage2_xgboost.joblib": 2022113
+  },
+  "peak_rss_mb": 198.6,
+  "n_bench_flows": 5000,
+  "latency": {
+    "batch_1": {
+      "n_warmup": 50.0,
+      "n_trials": 500.0,
+      "single_median_ms": 4.872973499999489,
+      "single_p95_ms": 10.320834599986014,
+      "single_p99_ms": 15.174463430039394,
+      "single_throughput_per_sec": 205.21351080610327,
+      "batch_size": 1.0,
+      "batch_median_ms": 4.168334000013374,
+      "batch_throughput_per_sec": 239.90400001458414
+    },
+    "batch_32": {
+      "n_warmup": 50.0,
+      "n_trials": 500.0,
+      "single_median_ms": 6.1189309999747366,
+      "single_p95_ms": 11.796005600007213,
+      "single_p99_ms": 16.154256350027932,
+      "single_throughput_per_sec": 163.42723917039245,
+      "batch_size": 32.0,
+      "batch_median_ms": 20.542137500001445,
+      "batch_throughput_per_sec": 1557.773625066902
+    },
+    "batch_128": {
+      "n_warmup": 50.0,
+      "n_trials": 500.0,
+      "single_median_ms": 6.576867500029948,
+      "single_p95_ms": 14.231089900027882,
+      "single_p99_ms": 24.9515309699916,
+      "single_throughput_per_sec": 152.04806847567576,
+      "batch_size": 128.0,
+      "batch_median_ms": 29.74208349996843,
+      "batch_throughput_per_sec": 4303.6662176049595
+    }
+  }
+}

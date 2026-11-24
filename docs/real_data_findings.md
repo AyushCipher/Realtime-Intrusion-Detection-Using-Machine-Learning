@@ -375,8 +375,165 @@ artifact above, not a match. Caveats: the signatures were written knowing which 
 names exist (not their data); this measures retrieval only, and whether the LLM then names
 the right technique needs a new live run.
 
-## 8. Not done
+## 8. Leave-one-attack-TYPE-out on the cleaned data: the gate ranking depends on the threat model
 
-* The leave-one-label-out `h1raw` part was not re-run on the cleaned data.
-* Completing the H3 re-test to 20 trials per category (needs another day of quota).
-* An LLM run of behaviour-keyed retrieval on the real alerts (section 7a; retrieval-only results are in).
+`run_paper_experiments.py --parts h1raw` on cleaned CSE-CIC-IDS2018
+(`results/paper/cicids2018_dedup_h1raw/`): each of 9 raw attack labels with at least 200
+rows is withheld in turn while its sibling labels stay known (e.g. DoS-Hulk withheld,
+DoS-GoldenEye known), 3 seeds, 7 gates, escalation budget 10%. Recall is measured at a
+matched 10% false-escalation rate on test known flows.
+
+| Gate | AUROC | Recall at matched 10% |
+|---|---|---|
+| softmax | **0.861** | **0.58** |
+| OpenMax | 0.857 | 0.56 |
+| max-logit | 0.812 | 0.47 |
+| energy | 0.811 | 0.46 |
+| kNN | 0.704 | 0.52 |
+| EFC | 0.663 | 0.11 |
+| Mahalanobis | 0.651 | 0.38 |
+
+OpenMax vs softmax, clustered over the 9 withheld labels: AUROC 5-4, p = 0.73; recall
+4-4, p = 0.95. No difference, again. The ranking is the reverse of section 4: when the
+unknown is a VARIANT of a known family, classifier-confidence gates (softmax, OpenMax)
+are best and kNN is weak (0.70); when the unknown is an entirely NEW family, kNN is best
+(0.64 vs 0.32 end to end). Which gate to deploy depends on the threat model.
+Infiltration is undetectable by every gate (AUROC 0.47).
+
+## 9. Tier 1 in a constrained container (edge proxy)
+
+`ml/scripts/edge_benchmark.py` (`results/paper/edge/edge_benchmark_1cpu_1gb.json`): the
+deployed Tier 1 (hybrid Stage 1, XGBoost Stage 2, kNN gate with conformal threshold)
+trained on 100,000 cleaned CSE-CIC-IDS2018 flows inside the ml Docker image, then timed in
+a container limited to 1 CPU and 1 GB (cgroup `cpu.max` 100000/100000, `memory.max` 1 GiB,
+confirmed from inside the container) on 5,000 held-out flows:
+
+| Measure | Result |
+|---|---|
+| Peak resident memory | 199 MB |
+| Models on disk | 13.6 MB (Stage 1 6.0, kNN gate 5.6, Stage 2 2.0) |
+| One flow per call | median 4.9-6.6 ms, p95 10-14 ms (about 240 flows/s) |
+| Batches of 32 / 128 | 1,558 / 4,304 flows/s |
+
+This is a CONSTRAINED-CONTAINER PROXY, not edge hardware: each core is a laptop x86 core.
+An ARM edge device (e.g. a Raspberry Pi 4 Cortex-A72) is several times slower per core;
+latency there was not measured.
+
+## 10. Miss budget under delayed analyst feedback (Part A)
+
+The published method for adaptive conformal inference with delayed feedback (El Halabi
+and Brandt, arXiv:2609.07251, 2026) is the plain delayed ACI recursion: when a label
+arrives, update with the error of the decision made when that flow was scored. That is
+exactly what `adaptive_stage1.py` already did (it records the threshold in force at
+decision time), so "adaptive" below IS that baseline. Its guarantee is long-run and
+assumes a fixed, known delay; bursty attack families and variable delays are not covered.
+
+One delay-robust candidate was fixed before evaluation: **union**, which flags a flow if
+either the adaptive (ACI) threshold or the detect-then-recalibrate (KS) threshold flags
+it. An attack is missed only when both miss it, so its miss rate is at most the smaller
+of the two, pointwise, at any delay; the price is the union of their benign flags.
+
+`run_paper_experiments.py --parts stage1 --stage1-kind hybrid --stage1-delays
+0,1000,10000,100000 --stage1-seeds 5` on cleaned CSE-CIC-IDS2018
+(`results/paper/cicids2018_dedup_delay/`). Evaluation stream: 37,195 attacks and 87,777
+benign flows in time order. Overall miss rate, mean of 5 seeds (benign flagged in
+brackets):
+
+| Budget, delay | static | adaptive (delayed ACI) | detect-then-recalibrate | **union** |
+|---|---|---|---|---|
+| 5%, 0 | 25.2% (40%) | 4.8% (52%) | 2.5% (51%) | **1.8%** (54%) |
+| 5%, 1,000 | 25.2% | 14.6% (48%) | 4.5% (51%) | **3.1%** (53%) |
+| 5%, 10,000 | 25.2% | 22.2% (44%) | 17.6% (54%) | **7.6%** (57%) |
+| 5%, 100,000 | **25.2%** | 47.3% (37%) | 43.7% (39%) | 43.7% (39%) |
+| 10%, 0 | 25.7% | 9.6% | 6.0% | **4.8%** |
+| 10%, 1,000 | 25.7% | 25.8% | 8.0% | **5.4%** |
+| 10%, 10,000 | 25.7% | 31.0% | 20.8% | **15.8%** |
+| 10%, 100,000 | **25.7%** | 48.6% | 44.4% | 44.0% |
+
+Reading:
+* Union meets the 5% budget up to a 1,000-flow delay and cuts misses 2-3x at 10,000,
+  where delayed ACI (the 2026 baseline) misses 22%. Cost: 2-4 points more benign flagged.
+* At a 100,000-flow delay EVERY online method is worse than not adapting (44-47% vs 25%).
+  Feedback that old describes earlier attack families; adapting to it moves the threshold
+  away from the families now arriving. This matches El Halabi and Brandt's
+  delay-to-memory view (what matters is the delay relative to how fast the data changes)
+  and gives a deployment rule: past some delay, freeze the threshold rather than adapt.
+* No method holds the budget at 10,000 flows or more. Union is a mitigation, not a fix.
+
+## 11. Behaviour-keyed retrieval on 500 real escalated alerts
+
+`ml/scripts/export_escalated_alerts.py --per-family 100` exported 500 real escalated alerts
+(100 per withheld family; 97.4% carry a wrong predicted class, 413 are predicted BENIGN;
+the 100 alerts of section 7a are a subset). `tier2_reasoner/scripts/eval_retrieval_real.py`,
+no LLM:
+
+| Retrieval | True technique ranked first | Among techniques sent |
+|---|---|---|
+| class-keyed (as built) | 92 / 500 | 163 / 500 |
+| **behaviour-keyed** | **175 / 500** | **332 / 500** (mean 2.4 sent) |
+| random (expected) | 86 | 243 (3 sent) |
+
+Per family, behaviour first/sent: Botnet 63/100, Brute Force 0/93, DoS/DDoS 48/73,
+Infiltration 0/2, Web Attack 64/64. Class-keyed hits on Botnet (79) and Infiltration (84
+sent) are the zero-score artifact of section 7a, not matching. The 100-alert result holds.
+
+## 12. Not done
+
+* LLM runs of behaviour-keyed retrieval: Gemini and Gemma (Google's open-weights model,
+  via the same API) returned "503 high demand" for most of 24 Nov 2026; runs are
+  resumable. Local Llama 3.2 1B (Ollama) runs are queued behind the cascade experiment.
+* Full-size datasets (needs more than 8 GB RAM), CIC-IoT2023 (needs registration), campus
+  traffic capture (needs IT and ethics approval).
+
+## 13. End-to-end miss budget for the whole cascade (Part B)
+
+An attack is missed end to end if Stage 1 passes it, or if Stage 1 flags it and Stage 2
+calls it BENIGN without the gate escalating it. Calibrating Stage 1 alone at budget alpha
+bounds only the first term. `ids_ml/cascade_crc.py` calibrates both stages together with
+conformal risk control (Angelopoulos et al., ICLR 2024): one parameter moves the Stage 1
+threshold and Stage 2's silence threshold monotonically, so each attack's loss is
+non-decreasing in it, and CRC picks the largest value whose (n+1)-corrected calibration
+risk is at most alpha, giving E[end-to-end miss] <= alpha for exchangeable known-family
+attacks. Two paths: lockstep quantile maps (`joint_crc`) and a monotone cost-aware path
+fitted on a separate shaping split (`joint_crc_cost`). Baselines: `separate` (the previous
+practice) and `bonferroni` (alpha/2 per stage). The closest published methods for
+multi-stage pipelines, CompCRC (arXiv:2611.11114) and PASC (arXiv:2605.18812), could not
+be read in full here and were not reproduced; they are related work, not baselines.
+
+`ml/scripts/run_cascade_crc.py` (`results/paper/cascade_crc/`): hybrid Stage 1, XGBoost
+Stage 2, kNN gate with its escalation threshold fixed at 10% on shaping benign flows;
+splits train 50% / shaping 15% / calibration 15% / test 20%; 10 seeds; three datasets
+(cleaned CSE-CIC-IDS2018 227k rows, cleaned UNSW-NB15 280k, cleaned LYCOS-IDS2017
+sampled to 300k). Random split (exchangeable, the guarantee applies). End-to-end miss,
+mean of 10 seeds, with the share of seeds over budget in brackets:
+
+| Dataset, budget | separate | bonferroni | joint_crc | joint_crc_cost |
+|---|---|---|---|---|
+| CSE 5% | **10.2%** (10/10) | 4.9% (2/10) | 4.9% (5/10) | 4.6% (2/10) |
+| CSE 10% | **11.1%** (10/10) | 9.7% (1/10) | 9.9% (5/10) | 9.4% (0/10) |
+| UNSW 5% | 5.07% (8/10) | 5.06% (5/10) | 5.05% (6/10) | 4.2% (1/10) |
+| UNSW 10% | 10.03% (6/10) | 9.7% (1/10) | 10.0% (5/10) | 9.1% (1/10) |
+| LYCOS 5% | 3.8% (0/10) | 4.7% (1/10) | 4.9% (3/10) | 3.9% (0/10) |
+| LYCOS 10% | 4.8% (0/10) | 8.6% (0/10) | 9.8% (3/10) | 5.5% (0/10) |
+
+Benign alert rate (the analyst cost), same cells: CSE 5% 9.7 / 19.6 / 19.5 / 20.6%;
+CSE 10% 3.4 / 10.2 / **4.8** / 6.8%; UNSW 10% 3.0 / 3.4 / 3.1 / 3.2%; LYCOS 0.01% for all.
+
+Reading:
+* The separate-calibration gap is real but dataset-dependent. It is driven by how often
+  Stage 2 calls a flagged attack BENIGN: 5.5% of flagged attacks on CSE-CIC-IDS2018 (miss
+  doubles at a 5% budget, every seed over), about 0.1% on UNSW-NB15 (marginally over),
+  0% on LYCOS-IDS2017 (no gap).
+* The cost-aware joint path keeps the mean under budget on every dataset and exceeds it in
+  at most 1 of 10 seeds per cell. Lockstep joint CRC and Bonferroni sit AT the budget on
+  UNSW-NB15 (5.05-5.06% at 5%, 10.0% at 10%): within seed-to-seed noise, but not under it.
+  Single seeds can exceed the budget because the guarantee is in expectation over
+  calibration draws, not per run.
+* Joint calibration is not always cheaper than Bonferroni: on CSE at 10% it halves the
+  benign alerts (4.8% vs 10.2%); at 5% they cost the same.
+* Under drift (chronological split, outside the guarantee) no static calibration gives a
+  useful operating point on CSE-CIC-IDS2018: separate misses 28% (Stage 2 silences 27% of
+  flagged new-family attacks), joint CRC falls back to alerting on everything, Bonferroni
+  holds misses at 2-3% but alerts on 88-93% of benign flows. On UNSW-NB15 every method
+  lands slightly over budget (5.3-5.5% at 5%). This is the case the adaptive methods of
+  section 10 address.

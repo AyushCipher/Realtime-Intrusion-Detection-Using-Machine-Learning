@@ -1,0 +1,189 @@
+{
+  "alerts": "C:/nids_data/real_alerts_500.jsonl",
+  "n_alerts": 500,
+  "overall": {
+    "n": 500,
+    "class": {
+      "hit@1": 92,
+      "hit@sent": 163,
+      "mean_n_sent": 2.68,
+      "empty": 0
+    },
+    "behaviour": {
+      "hit@1": 175,
+      "hit@sent": 332,
+      "mean_n_sent": 2.43,
+      "empty": 2
+    },
+    "auto": {
+      "hit@1": 175,
+      "hit@sent": 333,
+      "mean_n_sent": 2.44,
+      "empty": 0
+    },
+    "random_expected_hit@1": 85.7,
+    "random_expected_hit@3": 242.9,
+    "empty_behaviour_description": 2
+  },
+  "per_family": {
+    "Botnet": {
+      "n": 100,
+      "class": {
+        "hit@1": 79,
+        "hit@sent": 79,
+        "mean_n_sent": 2.58,
+        "empty": 0
+      },
+      "behaviour": {
+        "hit@1": 63,
+        "hit@sent": 100,
+        "mean_n_sent": 2.69,
+        "empty": 0
+      },
+      "auto": {
+        "hit@1": 63,
+        "hit@sent": 100,
+        "mean_n_sent": 2.69,
+        "empty": 0
+      },
+      "random_expected_hit@1": 14.3,
+      "random_expected_hit@3": 42.9,
+      "empty_behaviour_description": 0
+    },
+    "Brute Force": {
+      "n": 100,
+      "class": {
+        "hit@1": 0,
+        "hit@sent": 0,
+        "mean_n_sent": 3.0,
+        "empty": 0
+      },
+      "behaviour": {
+        "hit@1": 0,
+        "hit@sent": 93,
+        "mean_n_sent": 2.93,
+        "empty": 0
+      },
+      "auto": {
+        "hit@1": 0,
+        "hit@sent": 93,
+        "mean_n_sent": 2.93,
+        "empty": 0
+      },
+      "random_expected_hit@1": 14.3,
+      "random_expected_hit@3": 42.9,
+      "empty_behaviour_description": 0
+    },
+    "DoS/DDoS": {
+      "n": 100,
+      "class": {
+        "hit@1": 0,
+        "hit@sent": 0,
+        "mean_n_sent": 2.94,
+        "empty": 0
+      },
+      "behaviour": {
+        "hit@1": 48,
+        "hit@sent": 73,
+        "mean_n_sent": 2.51,
+        "empty": 1
+      },
+      "auto": {
+        "hit@1": 48,
+        "hit@sent": 73,
+        "mean_n_sent": 2.54,
+        "empty": 0
+      },
+      "random_expected_hit@1": 28.6,
+      "random_expected_hit@3": 71.4,
+      "empty_behaviour_description": 1
+    },
+    "Infiltration": {
+      "n": 100,
+      "class": {
+        "hit@1": 13,
+        "hit@sent": 84,
+        "mean_n_sent": 2.58,
+        "empty": 0
+      },
+      "behaviour": {
+        "hit@1": 0,
+        "hit@sent": 2,
+        "mean_n_sent": 2.24,
+        "empty": 1
+      },
+      "auto": {
+        "hit@1": 0,
+        "hit@sent": 3,
+        "mean_n_sent": 2.27,
+        "empty": 0
+      },
+      "random_expected_hit@1": 14.3,
+      "random_expected_hit@3": 42.9,
+      "empty_behaviour_description": 1
+    },
+    "Web Attack": {
+      "n": 100,
+      "class": {
+        "hit@1": 0,
+        "hit@sent": 0,
+        "mean_n_sent": 2.32,
+        "empty": 0
+      },
+      "behaviour": {
+        "hit@1": 64,
+        "hit@sent": 64,
+        "mean_n_sent": 1.76,
+        "empty": 0
+      },
+      "auto": {
+        "hit@1": 64,
+        "hit@sent": 64,
+        "mean_n_sent": 1.76,
+        "empty": 0
+      },
+      "random_expected_hit@1": 14.3,
+      "random_expected_hit@3": 42.9,
+      "empty_behaviour_description": 0
+    }
+  },
+  "top_behaviour_phrases_per_family": {
+    "Botnet": [
+      "short gaps between packets",
+      "reset flag",
+      "server replies",
+      "very few packets",
+      "little server response",
+      "push flag"
+    ],
+    "Brute Force": [
+      "server replies",
+      "small packets",
+      "short gaps between packets"
+    ],
+    "DoS/DDoS": [
+      "server replies",
+      "low byte rate",
+      "no server response",
+      "slow",
+      "short gaps between packets",
+      "small packets"
+    ],
+    "Infiltration": [
+      "short gaps between packets",
+      "low byte rate",
+      "server replies",
+      "small packets",
+      "slow",
+      "reset flag"
+    ],
+    "Web Attack": [
+      "server replies",
+      "reset flag",
+      "large forward packets",
+      "short gaps between packets",
+      "few packets",
+      "large client payload"
+    ]
+  }
+}
